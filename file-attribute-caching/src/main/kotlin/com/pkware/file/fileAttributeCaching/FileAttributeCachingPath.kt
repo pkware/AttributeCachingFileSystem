@@ -1,17 +1,14 @@
 package com.pkware.file.fileAttributeCaching
 
 import com.pkware.file.forwarding.ForwardingPath
+import java.io.IOException
 import java.nio.file.FileSystem
 import java.nio.file.LinkOption
 import java.nio.file.Path
 import java.nio.file.attribute.BasicFileAttributes
 import java.nio.file.attribute.DosFileAttributes
 import java.nio.file.attribute.PosixFileAttributes
-import java.util.concurrent.TimeUnit
-import java.util.function.Function
-
-// Set the cache preservation duration to 5 seconds as most file operations complete in this time.
-internal const val CACHE_PRESERVATION_TIME_SECONDS: Long = 5
+import java.nio.file.spi.FileSystemProvider
 
 /**
  * A [Path] instance that supports caching of [BasicFileAttributes] and other classes that extend it such as
@@ -19,21 +16,15 @@ internal const val CACHE_PRESERVATION_TIME_SECONDS: Long = 5
  *
  * @param fileSystem the [FileSystem] associated with this [FileAttributeCachingPath] instance.
  * @param delegate the [Path] to forward calls to if needed.
- * @param cacheTimeout the amount of time (in seconds) allowed before flushing this [FileAttributeCachingPath]'s cache.
- * The default is [CACHE_PRESERVATION_TIME_SECONDS].
  */
 internal class FileAttributeCachingPath(
     private val fileSystem: FileSystem,
     internal val delegate: Path,
-    internal val cacheTimeout: Long = CACHE_PRESERVATION_TIME_SECONDS
 ) : ForwardingPath(delegate) {
 
-    /**
-     * Instance of [ExpirableCache] that maps attribute class strings (*, dos:*, posix:*) to [BasicFileAttributes].
-     */
-    private val attributeCache = ExpirableCache<String, BasicFileAttributes?>(
-        TimeUnit.SECONDS.toMillis(cacheTimeout)
-    )
+    var basicAttributes: BasicFileAttributes? = null
+    var dosAttributes: DosFileAttributes? = null
+    var posixAttributes: PosixFileAttributes? = null
 
     override fun getFileSystem(): FileSystem = fileSystem
 
@@ -46,18 +37,18 @@ internal class FileAttributeCachingPath(
             delegate.resolve(other)
         }
 
-        return FileAttributeCachingPath(fileSystem, resolvedDelegatePath, cacheTimeout)
+        return FileAttributeCachingPath(fileSystem, resolvedDelegatePath)
     }
 
     override fun getName(index: Int): Path {
         val nameDelegate = delegate.getName(index)
         // Dont need to copy cache here because root cannot be returned, only element closest to root is returned.
-        return FileAttributeCachingPath(fileSystem, nameDelegate, cacheTimeout)
+        return FileAttributeCachingPath(fileSystem, nameDelegate)
     }
 
     override fun normalize(): Path {
         val normalizedDelegate = delegate.normalize()
-        val normalizedCachingPath = FileAttributeCachingPath(fileSystem, normalizedDelegate, cacheTimeout)
+        val normalizedCachingPath = FileAttributeCachingPath(fileSystem, normalizedDelegate)
         copyCachedAttributesTo(normalizedCachingPath)
         return normalizedCachingPath
     }
@@ -65,7 +56,7 @@ internal class FileAttributeCachingPath(
     override fun subpath(beginIndex: Int, endIndex: Int): Path {
         val subPathDelegate = delegate.subpath(beginIndex, endIndex)
         // Dont need to copy cache here because we dont know if we are returning the root or another part of the path.
-        return FileAttributeCachingPath(fileSystem, subPathDelegate, cacheTimeout)
+        return FileAttributeCachingPath(fileSystem, subPathDelegate)
     }
 
     override fun resolveSibling(other: Path): Path {
@@ -77,7 +68,7 @@ internal class FileAttributeCachingPath(
             delegate.resolveSibling(other)
         }
 
-        return FileAttributeCachingPath(fileSystem, resolvedSiblingDelegatePath, cacheTimeout)
+        return FileAttributeCachingPath(fileSystem, resolvedSiblingDelegatePath)
     }
 
     override fun relativize(other: Path): Path {
@@ -89,25 +80,25 @@ internal class FileAttributeCachingPath(
             delegate.relativize(other)
         }
 
-        return FileAttributeCachingPath(fileSystem, relativizedDelegatePath, cacheTimeout)
+        return FileAttributeCachingPath(fileSystem, relativizedDelegatePath)
     }
 
     override fun toAbsolutePath(): Path {
         val absoluteDelegate = delegate.toAbsolutePath()
-        val absoluteCachingPath = FileAttributeCachingPath(fileSystem, absoluteDelegate, cacheTimeout)
+        val absoluteCachingPath = FileAttributeCachingPath(fileSystem, absoluteDelegate)
         copyCachedAttributesTo(absoluteCachingPath)
         return absoluteCachingPath
     }
 
     override fun toRealPath(vararg options: LinkOption?): Path {
         val realDelegatePath = delegate.toRealPath()
-        val realCachingPath = FileAttributeCachingPath(fileSystem, realDelegatePath, cacheTimeout)
+        val realCachingPath = FileAttributeCachingPath(fileSystem, realDelegatePath)
         copyCachedAttributesTo(realCachingPath)
         return realCachingPath
     }
 
     /**
-     * Sets the cache entry for the given attribute [name] with the given [value]. Can only set entire
+     * Sets the entry for the given attribute [name] with the given [value]. Can only set entire
      * attribute `Class`es such as "dos:*", "posix:*", and "basic:*"
      *
      * The attribute name must include a "*" in order to be set within the cache.
@@ -117,59 +108,42 @@ internal class FileAttributeCachingPath(
      */
     fun <A : BasicFileAttributes?> setAttributeByName(name: String, value: A?) {
         // remove basic from our attribute name if present as basicFileAttributes can be accessed without that qualifier
-        val checkedName = name.substringAfter("basic:")
 
         // this check is to ensure that we are only storing attribute classes and not specific attributes
-        if (checkedName.contains("*")) {
-            attributeCache[checkedName] = value
+        when (name.substringAfter("basic:")) {
+            "*" -> basicAttributes = value
+            "dos:*" -> posixAttributes = value as? PosixFileAttributes
+            "posix:*" -> dosAttributes = value as? DosFileAttributes
         }
     }
 
     /**
-     * Sets the cache entry for the given attribute `Class` [type] with the given [value].
-     *
-     * @param type The attribute `Class` to cache. `Class` types include [BasicFileAttributes], [DosFileAttributes],
-     * or [PosixFileAttributes].
-     * @param value The attribute value to cache.
-     */
-    fun <A : BasicFileAttributes?> setAttributeByType(type: Class<A>, value: A?) {
-        when (type) {
-            BasicFileAttributes::class.java -> attributeCache["*"] = value
-            DosFileAttributes::class.java -> attributeCache["dos:*"] = value
-            PosixFileAttributes::class.java -> attributeCache["posix:*"] = value
-        }
-    }
-
-    /**
-     * Copies this [FileAttributeCachingPath]s cached values to the [target].
+     * Copies this [FileAttributeCachingPath]s values to the [target].
      *
      * @param target The [FileAttributeCachingPath] to copy cached attributes to.
+     * @throws IOException If something goes wrong with the underlying calls with obtaining this
+     * [FileAttributeCachingPath]'s attributes to copy.
+     * @throws UnsupportedOperationException If something goes wrong with the underlying calls with obtaining this
+     * [FileAttributeCachingPath]'s attributes to copy.
      */
+    @Throws(IOException::class, UnsupportedOperationException::class)
     fun copyCachedAttributesTo(target: FileAttributeCachingPath) {
         val delegateFileSystem = delegate.fileSystem
-        val delegateProvider = delegateFileSystem.provider()
         val supportedViews = delegateFileSystem.supportedFileAttributeViews()
 
         // getAllAttributesMatchingClass takes care of cache expiration and computation if this source cache is null
         // or expired
-        val basicFileAttributes = getAllAttributesMatchingClass(BasicFileAttributes::class.java) {
-            delegateProvider.readAttributes(delegate, BasicFileAttributes::class.java)
-        }
+        val basicFileAttributes = getAllAttributesMatchingClass(BasicFileAttributes::class.java)
 
         val dosFileAttributes = if (supportedViews.contains("dos")) {
-            getAllAttributesMatchingClass(DosFileAttributes::class.java) {
-                delegateProvider.readAttributes(delegate, DosFileAttributes::class.java)
-            }
+            getAllAttributesMatchingClass(DosFileAttributes::class.java)
         } else null
 
         val posixFileAttributes = if (supportedViews.contains("posix")) {
-            getAllAttributesMatchingClass(PosixFileAttributes::class.java) {
-                delegateProvider.readAttributes(delegate, PosixFileAttributes::class.java)
-            }
+            getAllAttributesMatchingClass(PosixFileAttributes::class.java)
         } else null
 
-        // Can set null values here but that's okay, next time value is read as null it will be computed
-        // from outside the cache.
+        // Can set null values here but that's okay.
         target.setAttributeByType(BasicFileAttributes::class.java, basicFileAttributes)
         target.setAttributeByType(DosFileAttributes::class.java, dosFileAttributes)
         target.setAttributeByType(PosixFileAttributes::class.java, posixFileAttributes)
@@ -178,43 +152,60 @@ internal class FileAttributeCachingPath(
     /**
      * Get all attributes matching the `Class` [type] from the cache.
      *
-     * If the given [type] is absent or the cache is expired, the [mappingFunction] is used to compute the `Class` data
-     * and populate the cache as well as return it.
-     *
      * @param type The attribute `Class` to get from the cache. Class` types include [BasicFileAttributes],
      * [DosFileAttributes], or [PosixFileAttributes].
-     * @param mappingFunction The function to use when computing a new cache value if the given [type] is not found or
-     * the cache is expired. This must not be `null`.
      * @return The value in the cache that corresponds to the given [type] or `null` if that [type] is not
-     * supported or the [mappingFunction] could not compute it.
+     * supported.
+     * @throws IOException  If something goes wrong with the underlying calls to the [delegate]
+     * [FileSystemProvider].
+     * @throws UnsupportedOperationException If the attributes of the given [type] are not supported.
      */
     @Suppress("UNCHECKED_CAST")
+    @Throws(IOException::class, UnsupportedOperationException::class)
     fun <A : BasicFileAttributes?> getAllAttributesMatchingClass(
         type: Class<A>,
-        mappingFunction: Function<in String?, out A?>
     ): A? = when (type) {
-        BasicFileAttributes::class.java -> attributeCache.computeIfExpiredOrAbsent("*", mappingFunction) as A
-        DosFileAttributes::class.java -> attributeCache.computeIfExpiredOrAbsent("dos:*", mappingFunction) as A
-        PosixFileAttributes::class.java -> attributeCache.computeIfExpiredOrAbsent("posix:*", mappingFunction) as A
+        BasicFileAttributes::class.java -> {
+            if (basicAttributes == null) {
+                basicAttributes = delegate.fileSystem.provider().readAttributes(
+                    delegate, BasicFileAttributes::class.java
+                )
+            }
+            basicAttributes as A
+        }
+        DosFileAttributes::class.java -> {
+            if (dosAttributes == null) {
+                dosAttributes = delegate.fileSystem.provider().readAttributes(
+                    delegate, DosFileAttributes::class.java
+                )
+            }
+            dosAttributes as A
+        }
+        PosixFileAttributes::class.java -> {
+            if (posixAttributes == null) {
+                posixAttributes = delegate.fileSystem.provider().readAttributes(
+                    delegate, PosixFileAttributes::class.java
+                )
+            }
+            posixAttributes as A
+        }
         else -> null
     }
 
     /**
      * Get all attributes matching [name] from the cache.
      *
-     * If the given [name] is absent or the cache is expired, the [mappingFunction] is used to compute the returned map
-     * data and populate the cache for future calls.
-     *
      * @param name The attributes to be retrieved from the cache. Can be single attributes or an entire attribute
      * `Class` String (ie: "dos:*","basic:*","posix:permissions", etc.).
-     * @param mappingFunction The function to use when computing a new cache value if the given [name] is not found or
-     * the cache is expired. This must not be `null`.
      * @return The value in the cache that corresponds to the given [name] or `null` if that [name] is not
-     * supported or the [mappingFunction] could not compute it.
+     * supported.
+     * @throws IOException  If something goes wrong with the underlying calls to the [delegate]
+     * [FileSystemProvider].
+     * @throws UnsupportedOperationException If the attributes of the given [name] are not supported.
      */
-    fun <A : BasicFileAttributes?> getAllAttributesMatchingName(
+    @Throws(IOException::class, UnsupportedOperationException::class)
+    fun getAllAttributesMatchingName(
         name: String,
-        mappingFunction: Function<in String?, out A?>
     ): MutableMap<String, Any>? {
 
         var attributeMap = mutableMapOf<String, Any>()
@@ -223,11 +214,26 @@ internal class FileAttributeCachingPath(
 
         // get our attribute class from the cache, should be BasicFileAttributes, DosFileAttributes, or PosixFileAttributes
         val attributeClass = if (checkedName.startsWith("dos")) {
-            attributeCache.computeIfExpiredOrAbsent("dos:*", mappingFunction)
+            if (dosAttributes == null) {
+                dosAttributes = delegate.fileSystem.provider().readAttributes(
+                    delegate, DosFileAttributes::class.java
+                )
+            }
+            dosAttributes
         } else if (checkedName.startsWith("posix")) {
-            attributeCache.computeIfExpiredOrAbsent("posix:*", mappingFunction)
+            if (posixAttributes == null) {
+                posixAttributes = delegate.fileSystem.provider().readAttributes(
+                    delegate, PosixFileAttributes::class.java
+                )
+            }
+            posixAttributes
         } else {
-            attributeCache.computeIfExpiredOrAbsent("*", mappingFunction)
+            if (basicAttributes == null) {
+                basicAttributes = delegate.fileSystem.provider().readAttributes(
+                    delegate, BasicFileAttributes::class.java
+                )
+            }
+            basicAttributes
         }
 
         if (attributeClass == null) return null
@@ -269,5 +275,20 @@ internal class FileAttributeCachingPath(
         if (attributeMap.isEmpty()) return null
 
         return attributeMap
+    }
+
+    /**
+     * Sets the entry for the given attribute `Class` [type] to the given [value].
+     *
+     * @param type The attribute `Class` to set. `Class` types include [BasicFileAttributes], [DosFileAttributes],
+     * or [PosixFileAttributes].
+     * @param value The attribute value to cache. Can be null.
+     */
+    private fun <A : BasicFileAttributes?> setAttributeByType(type: Class<A>, value: A?) {
+        when (type) {
+            BasicFileAttributes::class.java -> basicAttributes = value
+            DosFileAttributes::class.java -> posixAttributes = value as? PosixFileAttributes
+            PosixFileAttributes::class.java -> dosAttributes = value as? DosFileAttributes
+        }
     }
 }

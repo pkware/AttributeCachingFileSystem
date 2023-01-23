@@ -175,9 +175,9 @@ internal class FileAttributeCachingFileSystemProvider : FileSystemProvider() {
         System.getProperty("os.name").lowercase(Locale.ENGLISH).contains("win")
     ) {
         val cachingPath = path.asCachingPath()
-        val attributesMap = cachingPath.getAllAttributesMatchingName("dos:*") {
-            getAttributesClassFromPathProvider(cachingPath, "dos:*")
-        } ?: throw IOException("Could not get dos attributes from delegate filesystem.")
+        val attributesMap = cachingPath.getAllAttributesMatchingName("dos:*") ?: throw IOException(
+            "Could not get dos attributes from delegate filesystem."
+        )
         val isHidden = attributesMap["dos:hidden"] as Boolean && !(attributesMap["directory"] as Boolean)
         isHidden
     } else {
@@ -232,11 +232,9 @@ internal class FileAttributeCachingFileSystemProvider : FileSystemProvider() {
         type: Class<A>,
         vararg options: LinkOption
     ): A = if (path is FileAttributeCachingPath) {
-        val delegateProvider = path.delegate.fileSystem.provider()
-
-        val attributes = path.getAllAttributesMatchingClass(type) {
-            delegateProvider.readAttributes(path.delegate, type, *options)
-        } ?: throw UnsupportedOperationException("Could not read attributes from delegate filesystem.")
+        val attributes = path.getAllAttributesMatchingClass(type) ?: throw UnsupportedOperationException(
+            "Could not read attributes from delegate filesystem."
+        )
         attributes
     } else {
         throw IOException("Path was not a FileAttributeCachingPath, could not read attributes.")
@@ -266,9 +264,9 @@ internal class FileAttributeCachingFileSystemProvider : FileSystemProvider() {
         attributes: String,
         vararg options: LinkOption
     ): MutableMap<String, Any> = if (path is FileAttributeCachingPath) {
-        val attributesMap = path.getAllAttributesMatchingName(attributes) {
-            getAttributesClassFromPathProvider(path, attributes)
-        } ?: throw IllegalArgumentException("Could not read attributes from delegate filesystem.")
+        val attributesMap = path.getAllAttributesMatchingName(attributes) ?: throw IllegalArgumentException(
+            "Could not read attributes from delegate filesystem."
+        )
         attributesMap
     } else {
         throw UnsupportedOperationException("Path was not a FileAttributeCachingPath, could not read attributes.")
