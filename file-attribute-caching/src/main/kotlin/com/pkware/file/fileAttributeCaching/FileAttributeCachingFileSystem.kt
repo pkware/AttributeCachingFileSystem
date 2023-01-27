@@ -32,7 +32,24 @@ public class FileAttributeCachingFileSystem(
 
     override fun getPath(first: String, vararg more: String?): Path {
         val delegate = super.getPath(first, *more)
-        return FileAttributeCachingPath(this, delegate, cacheTimeout)
+        val cachingPath = FileAttributeCachingPath(this, delegate, cacheTimeout)
+        cachingPath.initializeCache()
+        return cachingPath
+    }
+
+    /**
+     * Converts [path] to a [FileAttributeCachingPath] if it is not one and initializes its cache if the [path] is
+     * exists and is a file.
+     *
+     * @param path The [Path] to convert.
+     * @return A [Path] that now has [FileAttributeCachingPath] properties, or the original [path] object.
+     */
+    public fun convertToCachingPath(path: Path): Path = if (path !is FileAttributeCachingPath) {
+        val cachingPath = FileAttributeCachingPath(this, path, cacheTimeout)
+        cachingPath.initializeCache()
+        cachingPath
+    } else {
+        path
     }
 
     public companion object {
@@ -46,6 +63,7 @@ public class FileAttributeCachingFileSystem(
          * @param fileSystem The [FileSystem] to wrap and associate with this [FileAttributeCachingFileSystem] instance.
          * @param cacheTimeout See [FileAttributeCachingFileSystem.cacheTimeout]. The default is
          * [CACHE_PRESERVATION_TIME_SECONDS].
+         * @return A new instance of this [FileAttributeCachingFileSystem].
          * @throws FileAlreadyExistsException If the underlying generated [URI] matches an existing
          * [FileSystem] - this should never occur.
          * @throws ProviderNotFoundException If the underlying [FileAttributeCachingFileSystem] cannot be found or
@@ -56,14 +74,14 @@ public class FileAttributeCachingFileSystem(
         public fun wrapping(
             fileSystem: FileSystem,
             cacheTimeout: Long = CACHE_PRESERVATION_TIME_SECONDS
-        ): FileSystem {
+        ): FileAttributeCachingFileSystem {
             val cachingFileSystem = FileSystems.newFileSystem(
                 // Need to ensure a unique fileSystem name everytime this is called, hence UUID.randomUUID()
                 URI.create("cache:///${UUID.randomUUID()}"),
                 mapOf(Pair("filesystem", fileSystem))
-            )
+            ) as FileAttributeCachingFileSystem
 
-            if (cachingFileSystem is FileAttributeCachingFileSystem) cachingFileSystem.cacheTimeout = cacheTimeout
+            cachingFileSystem.cacheTimeout = cacheTimeout
 
             return cachingFileSystem
         }

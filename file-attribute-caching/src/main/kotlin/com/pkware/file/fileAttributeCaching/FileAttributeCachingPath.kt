@@ -9,6 +9,8 @@ import java.nio.file.attribute.DosFileAttributes
 import java.nio.file.attribute.PosixFileAttributes
 import java.util.concurrent.TimeUnit
 import java.util.function.Function
+import kotlin.io.path.exists
+import kotlin.io.path.isRegularFile
 
 // Set the cache preservation duration to 5 seconds as most file operations complete in this time.
 internal const val CACHE_PRESERVATION_TIME_SECONDS: Long = 5
@@ -27,6 +29,11 @@ internal class FileAttributeCachingPath(
     internal val delegate: Path,
     internal val cacheTimeout: Long = CACHE_PRESERVATION_TIME_SECONDS
 ) : ForwardingPath(delegate) {
+
+    /**
+     * Controls whether calls to [initializeCache] populate the cache or not. Default is `false`.
+     */
+    var isInitialized = false
 
     /**
      * Instance of [ExpirableCache] that maps attribute class strings (*, dos:*, posix:*) to [BasicFileAttributes].
@@ -106,6 +113,44 @@ internal class FileAttributeCachingPath(
         return realCachingPath
     }
 
+    override fun toString(): String = delegate.toString()
+
+    /**
+     * Initializes the cache of this [FileAttributeCachingPath] instance if it has not already been initialized, if it
+     * is a regular file, and if it exists.
+     */
+    fun initializeCache() {
+        if (!isInitialized && delegate.isRegularFile() && delegate.exists()) {
+            val delegateFileSystem = delegate.fileSystem
+            val delegateProvider = delegateFileSystem.provider()
+            val supportedViews = delegateFileSystem.supportedFileAttributeViews()
+
+            val basicFileAttributesType = BasicFileAttributes::class.java
+            setAttributeByType(
+                basicFileAttributesType,
+                delegateProvider.readAttributes(delegate, basicFileAttributesType)
+            )
+
+            if (supportedViews.contains("dos")) {
+                val dosFileAttributesType = DosFileAttributes::class.java
+                setAttributeByType(
+                    dosFileAttributesType,
+                    delegateProvider.readAttributes(delegate, dosFileAttributesType)
+                )
+            }
+
+            if (supportedViews.contains("posix")) {
+                val posixFileAttributesType = PosixFileAttributes::class.java
+                setAttributeByType(
+                    posixFileAttributesType,
+                    delegateProvider.readAttributes(delegate, posixFileAttributesType)
+                )
+            }
+
+            isInitialized = true
+        }
+    }
+
     /**
      * Sets the cache entry for the given attribute [name] with the given [value]. Can only set entire
      * attribute `Class`es such as "dos:*", "posix:*", and "basic:*"
@@ -146,33 +191,36 @@ internal class FileAttributeCachingPath(
      * @param target The [FileAttributeCachingPath] to copy cached attributes to.
      */
     fun copyCachedAttributesTo(target: FileAttributeCachingPath) {
-        val delegateFileSystem = delegate.fileSystem
-        val delegateProvider = delegateFileSystem.provider()
-        val supportedViews = delegateFileSystem.supportedFileAttributeViews()
+        if (delegate.exists()) {
+            val delegateFileSystem = delegate.fileSystem
+            val delegateProvider = delegateFileSystem.provider()
+            val supportedViews = delegateFileSystem.supportedFileAttributeViews()
 
-        // getAllAttributesMatchingClass takes care of cache expiration and computation if this source cache is null
-        // or expired
-        val basicFileAttributes = getAllAttributesMatchingClass(BasicFileAttributes::class.java) {
-            delegateProvider.readAttributes(delegate, BasicFileAttributes::class.java)
+            // getAllAttributesMatchingClass takes care of cache expiration and computation if this source cache is null
+            // or expired
+            val basicFileAttributes = getAllAttributesMatchingClass(BasicFileAttributes::class.java) {
+                delegateProvider.readAttributes(delegate, BasicFileAttributes::class.java)
+            }
+
+            val dosFileAttributes = if (supportedViews.contains("dos")) {
+                getAllAttributesMatchingClass(DosFileAttributes::class.java) {
+                    delegateProvider.readAttributes(delegate, DosFileAttributes::class.java)
+                }
+            } else null
+
+            val posixFileAttributes = if (supportedViews.contains("posix")) {
+                getAllAttributesMatchingClass(PosixFileAttributes::class.java) {
+                    delegateProvider.readAttributes(delegate, PosixFileAttributes::class.java)
+                }
+            } else null
+
+            // Can set null values here but that's okay, next time value is read as null it will be computed
+            // from outside the cache.
+            target.setAttributeByType(BasicFileAttributes::class.java, basicFileAttributes)
+            target.setAttributeByType(DosFileAttributes::class.java, dosFileAttributes)
+            target.setAttributeByType(PosixFileAttributes::class.java, posixFileAttributes)
+            target.isInitialized = isInitialized
         }
-
-        val dosFileAttributes = if (supportedViews.contains("dos")) {
-            getAllAttributesMatchingClass(DosFileAttributes::class.java) {
-                delegateProvider.readAttributes(delegate, DosFileAttributes::class.java)
-            }
-        } else null
-
-        val posixFileAttributes = if (supportedViews.contains("posix")) {
-            getAllAttributesMatchingClass(PosixFileAttributes::class.java) {
-                delegateProvider.readAttributes(delegate, PosixFileAttributes::class.java)
-            }
-        } else null
-
-        // Can set null values here but that's okay, next time value is read as null it will be computed
-        // from outside the cache.
-        target.setAttributeByType(BasicFileAttributes::class.java, basicFileAttributes)
-        target.setAttributeByType(DosFileAttributes::class.java, dosFileAttributes)
-        target.setAttributeByType(PosixFileAttributes::class.java, posixFileAttributes)
     }
 
     /**
