@@ -28,7 +28,24 @@ public class FileAttributeCachingFileSystem(
 
     override fun getPath(first: String, vararg more: String?): Path {
         val delegate = super.getPath(first, *more)
-        return FileAttributeCachingPath(this, delegate)
+        val cachingPath = FileAttributeCachingPath(this, delegate)
+        cachingPath.initializeCache()
+        return cachingPath
+    }
+
+    /**
+     * Converts [path] to a [FileAttributeCachingPath] if it is not one and initializes its cache if the [path] is
+     * exists and is a file.
+     *
+     * @param path The [Path] to convert.
+     * @return A [Path] that now has [FileAttributeCachingPath] properties, or the original [path] object.
+     */
+    public fun convertToCachingPath(path: Path): Path = if (path !is FileAttributeCachingPath) {
+        val cachingPath = FileAttributeCachingPath(this, path)
+        cachingPath.initializeCache()
+        cachingPath
+    } else {
+        path
     }
 
     public companion object {
@@ -40,6 +57,7 @@ public class FileAttributeCachingFileSystem(
          * [wrapping].
          *
          * @param fileSystem The [FileSystem] to wrap and associate with this [FileAttributeCachingFileSystem] instance.
+         * @return A new instance of this [FileAttributeCachingFileSystem].
          * @throws FileAlreadyExistsException If the underlying generated [URI] matches an existing
          * [FileSystem] - this should never occur.
          * @throws ProviderNotFoundException If the underlying [FileAttributeCachingFileSystem] cannot be found or
@@ -49,10 +67,10 @@ public class FileAttributeCachingFileSystem(
         @Throws(FileAlreadyExistsException::class, ProviderNotFoundException::class, IOException::class)
         public fun wrapping(
             fileSystem: FileSystem,
-        ): FileSystem = FileSystems.newFileSystem(
+        ): FileAttributeCachingFileSystem = FileSystems.newFileSystem(
             // Need to ensure a unique fileSystem name everytime this is called, hence UUID.randomUUID()
             URI.create("cache:///${UUID.randomUUID()}"),
             mapOf(Pair("filesystem", fileSystem))
-        )
+        ) as FileAttributeCachingFileSystem
     }
 }

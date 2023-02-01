@@ -31,6 +31,71 @@ import java.util.stream.Stream
 import kotlin.io.path.exists
 
 class FileAttributeCachingFilesystemTests {
+
+    @ParameterizedTest
+    @MethodSource("allFileSystems")
+    fun `cache gets initialized only after file exists and getPath is called`(
+        fileSystem: FileSystem
+    ) {
+        val tempDirPath = fileSystem.getPath("temp")
+
+        FileAttributeCachingFileSystem.wrapping(fileSystem).use {
+
+            // get file attribute caching path
+            Files.createDirectory(tempDirPath)
+            var testPath = it.getPath("$tempDirPath${it.separator}testfile.txt")
+            var cachingPath = testPath as FileAttributeCachingPath
+            assertThat(cachingPath.isInitialized).isFalse()
+            Files.createFile(cachingPath)
+
+            // the path should not initialize here
+            assertThat(cachingPath.isInitialized).isFalse()
+
+            // get tha path again, it should now initialize since it exists
+            testPath = it.getPath("$tempDirPath${it.separator}testfile.txt")
+            cachingPath = testPath as FileAttributeCachingPath
+            assertThat(cachingPath.isInitialized).isTrue()
+
+            // now read attributes from caching path and verify they dont change
+            val attributesMap = Files.readAttributes(cachingPath, "*")
+            assertThat(attributesMap).isNotEmpty()
+        }
+    }
+
+    @ParameterizedTest
+    @MethodSource("allFileSystems")
+    fun `cache gets initialized only after file exists and convertToCachingPath is called`(
+        fileSystem: FileSystem
+    ) {
+        val tempDirPath = fileSystem.getPath("temp")
+        Files.createDirectory(tempDirPath)
+        val testPath = fileSystem.getPath("$tempDirPath${fileSystem.separator}testfile.txt")
+
+        FileAttributeCachingFileSystem.wrapping(fileSystem).use {
+
+            assertThat(testPath).isNotInstanceOf(FileAttributeCachingPath::class.java)
+            // get and verify file attribute caching path
+
+            var cachingPath = it.convertToCachingPath(testPath)
+            assertThat(cachingPath).isInstanceOf(FileAttributeCachingPath::class.java)
+            cachingPath = cachingPath as FileAttributeCachingPath
+            assertThat(cachingPath.isInitialized).isFalse()
+            Files.createFile(cachingPath)
+            // the path should not initialize here
+            assertThat(cachingPath.isInitialized).isFalse()
+
+            // get tha path again, it should now convert since it exists
+            cachingPath = it.convertToCachingPath(testPath)
+            assertThat(cachingPath).isInstanceOf(FileAttributeCachingPath::class.java)
+            cachingPath = cachingPath as FileAttributeCachingPath
+            assertThat(cachingPath.isInitialized).isTrue()
+
+            // now read attributes from caching path and verify they dont change
+            val attributesMap = Files.readAttributes(cachingPath, "*")
+            assertThat(attributesMap).isNotEmpty()
+        }
+    }
+
     @Test
     fun `create java io tmpdir file with default filesystem wrapped by file attribute caching filesystem`() {
         FileAttributeCachingFileSystem.wrapping(FileSystems.getDefault()).use {

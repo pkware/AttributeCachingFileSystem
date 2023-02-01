@@ -9,6 +9,8 @@ import java.nio.file.attribute.BasicFileAttributes
 import java.nio.file.attribute.DosFileAttributes
 import java.nio.file.attribute.PosixFileAttributes
 import java.nio.file.spi.FileSystemProvider
+import kotlin.io.path.exists
+import kotlin.io.path.isRegularFile
 
 /**
  * A [Path] instance that supports caching of [BasicFileAttributes] and other classes that extend it such as
@@ -22,9 +24,14 @@ internal class FileAttributeCachingPath(
     internal val delegate: Path,
 ) : ForwardingPath(delegate) {
 
-    var basicAttributes: BasicFileAttributes? = null
-    var dosAttributes: DosFileAttributes? = null
-    var posixAttributes: PosixFileAttributes? = null
+    /**
+     * Controls whether calls to [initializeCache] populate the cache or not. Default is `false`.
+     */
+    var isInitialized = false
+
+    private var basicAttributes: BasicFileAttributes? = null
+    private var dosAttributes: DosFileAttributes? = null
+    private var posixAttributes: PosixFileAttributes? = null
 
     override fun getFileSystem(): FileSystem = fileSystem
 
@@ -97,6 +104,44 @@ internal class FileAttributeCachingPath(
         return realCachingPath
     }
 
+    override fun toString(): String = delegate.toString()
+
+    /**
+     * Initializes the attributes of this [FileAttributeCachingPath] instance if it has not already been initialized,
+     * if it is a regular file, and if it exists.
+     */
+    fun initializeCache() {
+        if (!isInitialized && delegate.isRegularFile() && delegate.exists()) {
+            val delegateFileSystem = delegate.fileSystem
+            val delegateProvider = delegateFileSystem.provider()
+            val supportedViews = delegateFileSystem.supportedFileAttributeViews()
+
+            val basicFileAttributesType = BasicFileAttributes::class.java
+            setAttributeByType(
+                basicFileAttributesType,
+                delegateProvider.readAttributes(delegate, basicFileAttributesType)
+            )
+
+            if (supportedViews.contains("dos")) {
+                val dosFileAttributesType = DosFileAttributes::class.java
+                setAttributeByType(
+                    dosFileAttributesType,
+                    delegateProvider.readAttributes(delegate, dosFileAttributesType)
+                )
+            }
+
+            if (supportedViews.contains("posix")) {
+                val posixFileAttributesType = PosixFileAttributes::class.java
+                setAttributeByType(
+                    posixFileAttributesType,
+                    delegateProvider.readAttributes(delegate, posixFileAttributesType)
+                )
+            }
+
+            isInitialized = true
+        }
+    }
+
     /**
      * Sets the entry for the given attribute [name] with the given [value]. Can only set entire
      * attribute `Class`es such as "dos:*", "posix:*", and "basic:*"
@@ -128,25 +173,26 @@ internal class FileAttributeCachingPath(
      */
     @Throws(IOException::class, UnsupportedOperationException::class)
     fun copyCachedAttributesTo(target: FileAttributeCachingPath) {
-        val delegateFileSystem = delegate.fileSystem
-        val supportedViews = delegateFileSystem.supportedFileAttributeViews()
+        if (delegate.exists()) {
+            val delegateFileSystem = delegate.fileSystem
+            val supportedViews = delegateFileSystem.supportedFileAttributeViews()
 
-        // getAllAttributesMatchingClass takes care of cache expiration and computation if this source cache is null
-        // or expired
-        val basicFileAttributes = getAllAttributesMatchingClass(BasicFileAttributes::class.java)
+            val basicFileAttributes = getAllAttributesMatchingClass(BasicFileAttributes::class.java)
 
-        val dosFileAttributes = if (supportedViews.contains("dos")) {
-            getAllAttributesMatchingClass(DosFileAttributes::class.java)
-        } else null
+            val dosFileAttributes = if (supportedViews.contains("dos")) {
+                getAllAttributesMatchingClass(DosFileAttributes::class.java)
+            } else null
 
-        val posixFileAttributes = if (supportedViews.contains("posix")) {
-            getAllAttributesMatchingClass(PosixFileAttributes::class.java)
-        } else null
+            val posixFileAttributes = if (supportedViews.contains("posix")) {
+                getAllAttributesMatchingClass(PosixFileAttributes::class.java)
+            } else null
 
-        // Can set null values here but that's okay.
-        target.setAttributeByType(BasicFileAttributes::class.java, basicFileAttributes)
-        target.setAttributeByType(DosFileAttributes::class.java, dosFileAttributes)
-        target.setAttributeByType(PosixFileAttributes::class.java, posixFileAttributes)
+            // Can set null values here but that's okay.
+            target.setAttributeByType(BasicFileAttributes::class.java, basicFileAttributes)
+            target.setAttributeByType(DosFileAttributes::class.java, dosFileAttributes)
+            target.setAttributeByType(PosixFileAttributes::class.java, posixFileAttributes)
+            target.isInitialized = isInitialized
+        }
     }
 
     /**

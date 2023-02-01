@@ -3,6 +3,8 @@ package com.pkware.file.fileAttributeCaching
 import com.google.auto.service.AutoService
 import java.io.IOException
 import java.net.URI
+import java.nio.channels.AsynchronousFileChannel
+import java.nio.channels.FileChannel
 import java.nio.channels.SeekableByteChannel
 import java.nio.file.AccessMode
 import java.nio.file.CopyOption
@@ -12,6 +14,7 @@ import java.nio.file.FileSystem
 import java.nio.file.FileSystemNotFoundException
 import java.nio.file.Files
 import java.nio.file.LinkOption
+import java.nio.file.NotLinkException
 import java.nio.file.OpenOption
 import java.nio.file.Path
 import java.nio.file.Paths
@@ -26,6 +29,7 @@ import java.nio.file.attribute.PosixFileAttributeView
 import java.nio.file.attribute.PosixFileAttributes
 import java.nio.file.spi.FileSystemProvider
 import java.util.Locale
+import java.util.concurrent.ExecutorService
 
 /**
  * A [FileSystemProvider] wrapper that handles [FileAttributeCachingPath]s for reading and writing file attributes.
@@ -207,6 +211,64 @@ internal class FileAttributeCachingFileSystemProvider : FileSystemProvider() {
         val providerDelegate = delegatePath.fileSystem.provider()
         return providerDelegate.getFileAttributeView(delegatePath, type, *options)
     }
+
+    @Throws(
+        IllegalArgumentException::class,
+        UnsupportedOperationException::class,
+        FileAlreadyExistsException::class,
+        IOException::class
+    )
+    override fun newFileChannel(
+        path: Path,
+        options: Set<OpenOption?>,
+        vararg attrs: FileAttribute<*>?
+    ): FileChannel {
+        val delegatePath = path.asCachingPath().delegate
+        val providerDelegate = delegatePath.fileSystem.provider()
+        return providerDelegate.newFileChannel(delegatePath, options, *attrs)
+    }
+
+    @Throws(
+        IllegalArgumentException::class,
+        UnsupportedOperationException::class,
+        FileAlreadyExistsException::class,
+        IOException::class
+    )
+    override fun newAsynchronousFileChannel(
+        path: Path,
+        options: Set<OpenOption?>,
+        executor: ExecutorService,
+        vararg attrs: FileAttribute<*>?
+    ): AsynchronousFileChannel {
+        val delegatePath = path.asCachingPath().delegate
+        val providerDelegate = delegatePath.fileSystem.provider()
+        return providerDelegate.newAsynchronousFileChannel(delegatePath, options, executor, *attrs)
+    }
+
+    @Throws(
+        UnsupportedOperationException::class,
+        FileAlreadyExistsException::class,
+        IOException::class
+    )
+    override fun createSymbolicLink(link: Path, target: Path, vararg attrs: FileAttribute<*>?) {
+        Files.createSymbolicLink(link.asCachingPath().delegate, target.asCachingPath().delegate, *attrs)
+    }
+
+    @Throws(
+        UnsupportedOperationException::class,
+        FileAlreadyExistsException::class,
+        IOException::class
+    )
+    override fun createLink(link: Path, existing: Path) {
+        Files.createLink(link.asCachingPath().delegate, existing.asCachingPath().delegate)
+    }
+
+    @Throws(
+        UnsupportedOperationException::class,
+        NotLinkException::class,
+        IOException::class
+    )
+    override fun readSymbolicLink(link: Path): Path? = Files.readSymbolicLink(link.asCachingPath().delegate)
 
     /**
      * Read file attributes specified by the attribute `Class` [type] from the incoming [path]. If the returned
