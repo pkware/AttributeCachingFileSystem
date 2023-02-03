@@ -4,12 +4,13 @@ import com.pkware.file.forwarding.ForwardingPath
 import java.io.IOException
 import java.nio.file.FileSystem
 import java.nio.file.LinkOption
+import java.nio.file.NoSuchFileException
 import java.nio.file.Path
 import java.nio.file.attribute.BasicFileAttributes
 import java.nio.file.attribute.DosFileAttributes
 import java.nio.file.attribute.PosixFileAttributes
 import java.nio.file.spi.FileSystemProvider
-import kotlin.io.path.exists
+import kotlin.io.path.isDirectory
 import kotlin.io.path.isRegularFile
 
 /**
@@ -144,7 +145,7 @@ internal class FileAttributeCachingPath(
      */
     @Throws(IOException::class, UnsupportedOperationException::class)
     fun copyCachedAttributesTo(target: FileAttributeCachingPath) {
-        if (delegate.exists()) {
+        try {
             val delegateFileSystem = delegate.fileSystem
             val supportedViews = delegateFileSystem.supportedFileAttributeViews()
 
@@ -163,6 +164,9 @@ internal class FileAttributeCachingPath(
             target.setAttributeByType(DosFileAttributes::class.java, dosFileAttributes)
             target.setAttributeByType(PosixFileAttributes::class.java, posixFileAttributes)
             target.isInitialized = isInitialized
+        } catch (expected: NoSuchFileException) {
+            // swallow NoSuchFileExceptions and skip cache copies for now, since checking if we exist, and if
+            // we are a regular file do incur OTHER_IOPS penalties.
         }
     }
 
@@ -299,34 +303,39 @@ internal class FileAttributeCachingPath(
      * if it is a regular file, and if it exists.
      */
     private fun initializeCache() {
-        if (!isInitialized && delegate.isRegularFile() && delegate.exists()) {
-            val delegateFileSystem = delegate.fileSystem
-            val delegateProvider = delegateFileSystem.provider()
-            val supportedViews = delegateFileSystem.supportedFileAttributeViews()
+        if (!isInitialized) {
+            try {
+                val delegateFileSystem = delegate.fileSystem
+                val delegateProvider = delegateFileSystem.provider()
+                val supportedViews = delegateFileSystem.supportedFileAttributeViews()
 
-            val basicFileAttributesType = BasicFileAttributes::class.java
-            setAttributeByType(
-                basicFileAttributesType,
-                delegateProvider.readAttributes(delegate, basicFileAttributesType)
-            )
-
-            if (supportedViews.contains("dos")) {
-                val dosFileAttributesType = DosFileAttributes::class.java
+                val basicFileAttributesType = BasicFileAttributes::class.java
                 setAttributeByType(
-                    dosFileAttributesType,
-                    delegateProvider.readAttributes(delegate, dosFileAttributesType)
+                    basicFileAttributesType,
+                    delegateProvider.readAttributes(delegate, basicFileAttributesType)
                 )
-            }
 
-            if (supportedViews.contains("posix")) {
-                val posixFileAttributesType = PosixFileAttributes::class.java
-                setAttributeByType(
-                    posixFileAttributesType,
-                    delegateProvider.readAttributes(delegate, posixFileAttributesType)
-                )
-            }
+                if (supportedViews.contains("dos")) {
+                    val dosFileAttributesType = DosFileAttributes::class.java
+                    setAttributeByType(
+                        dosFileAttributesType,
+                        delegateProvider.readAttributes(delegate, dosFileAttributesType)
+                    )
+                }
 
-            isInitialized = true
+                if (supportedViews.contains("posix")) {
+                    val posixFileAttributesType = PosixFileAttributes::class.java
+                    setAttributeByType(
+                        posixFileAttributesType,
+                        delegateProvider.readAttributes(delegate, posixFileAttributesType)
+                    )
+                }
+
+                isInitialized = true
+            } catch (expected: NoSuchFileException) {
+                // swallow NoSuchFileExceptions and skip cache initializations for now, since checking if we exist, and
+                // if we are a regular file do incur OTHER_IOPS penalties.
+            }
         }
     }
 
