@@ -42,6 +42,10 @@ import java.util.concurrent.ExecutorService
 internal class FileAttributeCachingFileSystemProvider : FileSystemProvider() {
 
     private val fileSystems = mutableMapOf<URI, FileSystem>()
+    private val isWindowsOS by lazy {
+        // Adapted from org/junit/jupiter/api/condition/OS.java to look up the operating system name
+        System.getProperty("os.name").lowercase(Locale.ENGLISH).contains("win")
+    }
 
     override fun getScheme(): String = "cache"
 
@@ -174,10 +178,7 @@ internal class FileAttributeCachingFileSystemProvider : FileSystemProvider() {
      * @throws IOException if an error occurs while accessing the underlying delegate provider.
      */
     @Throws(IOException::class)
-    override fun isHidden(path: Path): Boolean = if (
-        // Adapted from org/junit/jupiter/api/condition/OS.java to look up the operating system name
-        System.getProperty("os.name").lowercase(Locale.ENGLISH).contains("win")
-    ) {
+    override fun isHidden(path: Path): Boolean = if (isWindowsOS) {
         val cachingPath = path.asCachingPath()
         val attributesMap = cachingPath.getAllAttributesMatchingName("dos:*") ?: throw IOException(
             "Could not get dos attributes from delegate filesystem."

@@ -28,9 +28,7 @@ public class FileAttributeCachingFileSystem(
 
     override fun getPath(first: String, vararg more: String?): Path {
         val delegate = super.getPath(first, *more)
-        val cachingPath = FileAttributeCachingPath(this, delegate)
-        cachingPath.initializeCache()
-        return cachingPath
+        return FileAttributeCachingPath(this, delegate, true)
     }
 
     /**
@@ -41,9 +39,7 @@ public class FileAttributeCachingFileSystem(
      * @return A [Path] that now has [FileAttributeCachingPath] properties, or the original [path] object.
      */
     public fun convertToCachingPath(path: Path): Path = if (path !is FileAttributeCachingPath) {
-        val cachingPath = FileAttributeCachingPath(this, path)
-        cachingPath.initializeCache()
-        cachingPath
+        FileAttributeCachingPath(this, path, true)
     } else {
         path
     }

@@ -18,10 +18,13 @@ import kotlin.io.path.isRegularFile
  *
  * @param fileSystem the [FileSystem] associated with this [FileAttributeCachingPath] instance.
  * @param delegate the [Path] to forward calls to if needed.
+ * @param initializeCache `true` to initialize the cached attribute fields of this [FileAttributeCachingPath] instance.
+ * The default is `false`.
  */
 internal class FileAttributeCachingPath(
     private val fileSystem: FileSystem,
     internal val delegate: Path,
+    private val initializeCache: Boolean = false,
 ) : ForwardingPath(delegate) {
 
     /**
@@ -32,6 +35,10 @@ internal class FileAttributeCachingPath(
     private var basicAttributes: BasicFileAttributes? = null
     private var dosAttributes: DosFileAttributes? = null
     private var posixAttributes: PosixFileAttributes? = null
+
+    init {
+        if (initializeCache) initializeCache()
+    }
 
     override fun getFileSystem(): FileSystem = fileSystem
 
@@ -105,42 +112,6 @@ internal class FileAttributeCachingPath(
     }
 
     override fun toString(): String = delegate.toString()
-
-    /**
-     * Initializes the attributes of this [FileAttributeCachingPath] instance if it has not already been initialized,
-     * if it is a regular file, and if it exists.
-     */
-    fun initializeCache() {
-        if (!isInitialized && delegate.isRegularFile() && delegate.exists()) {
-            val delegateFileSystem = delegate.fileSystem
-            val delegateProvider = delegateFileSystem.provider()
-            val supportedViews = delegateFileSystem.supportedFileAttributeViews()
-
-            val basicFileAttributesType = BasicFileAttributes::class.java
-            setAttributeByType(
-                basicFileAttributesType,
-                delegateProvider.readAttributes(delegate, basicFileAttributesType)
-            )
-
-            if (supportedViews.contains("dos")) {
-                val dosFileAttributesType = DosFileAttributes::class.java
-                setAttributeByType(
-                    dosFileAttributesType,
-                    delegateProvider.readAttributes(delegate, dosFileAttributesType)
-                )
-            }
-
-            if (supportedViews.contains("posix")) {
-                val posixFileAttributesType = PosixFileAttributes::class.java
-                setAttributeByType(
-                    posixFileAttributesType,
-                    delegateProvider.readAttributes(delegate, posixFileAttributesType)
-                )
-            }
-
-            isInitialized = true
-        }
-    }
 
     /**
      * Sets the entry for the given attribute [name] with the given [value]. Can only set entire
@@ -321,6 +292,42 @@ internal class FileAttributeCachingPath(
         if (attributeMap.isEmpty()) return null
 
         return attributeMap
+    }
+
+    /**
+     * Initializes the attributes of this [FileAttributeCachingPath] instance if it has not already been initialized,
+     * if it is a regular file, and if it exists.
+     */
+    private fun initializeCache() {
+        if (!isInitialized && delegate.isRegularFile() && delegate.exists()) {
+            val delegateFileSystem = delegate.fileSystem
+            val delegateProvider = delegateFileSystem.provider()
+            val supportedViews = delegateFileSystem.supportedFileAttributeViews()
+
+            val basicFileAttributesType = BasicFileAttributes::class.java
+            setAttributeByType(
+                basicFileAttributesType,
+                delegateProvider.readAttributes(delegate, basicFileAttributesType)
+            )
+
+            if (supportedViews.contains("dos")) {
+                val dosFileAttributesType = DosFileAttributes::class.java
+                setAttributeByType(
+                    dosFileAttributesType,
+                    delegateProvider.readAttributes(delegate, dosFileAttributesType)
+                )
+            }
+
+            if (supportedViews.contains("posix")) {
+                val posixFileAttributesType = PosixFileAttributes::class.java
+                setAttributeByType(
+                    posixFileAttributesType,
+                    delegateProvider.readAttributes(delegate, posixFileAttributesType)
+                )
+            }
+
+            isInitialized = true
+        }
     }
 
     /**
