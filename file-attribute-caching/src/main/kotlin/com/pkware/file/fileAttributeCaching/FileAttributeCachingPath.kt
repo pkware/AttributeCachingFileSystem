@@ -349,8 +349,8 @@ internal class FileAttributeCachingPath(
     private fun <A : BasicFileAttributes?> setAttributeByType(type: Class<A>, value: A?) {
         when (type) {
             BasicFileAttributes::class.java -> basicAttributes = value
-            DosFileAttributes::class.java -> posixAttributes = value as? PosixFileAttributes
-            PosixFileAttributes::class.java -> dosAttributes = value as? DosFileAttributes
+            DosFileAttributes::class.java -> dosAttributes = value as? DosFileAttributes
+            PosixFileAttributes::class.java -> posixAttributes = value as? PosixFileAttributes
         }
     }
 }
