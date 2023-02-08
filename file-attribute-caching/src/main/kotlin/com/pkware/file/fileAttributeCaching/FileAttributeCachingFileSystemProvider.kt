@@ -340,9 +340,11 @@ internal class FileAttributeCachingFileSystemProvider : FileSystemProvider() {
     @Throws(IOException::class, UnsupportedOperationException::class, IllegalArgumentException::class)
     override fun setAttribute(path: Path, attribute: String, value: Any?, vararg options: LinkOption) {
 
-        if (path !is FileAttributeCachingPath) throw UnsupportedOperationException(
-            "Could not set attribute(s) or the attribute cache for $path. Path was not a FileAttributeCachingPath."
-        )
+        if (path !is FileAttributeCachingPath) {
+            throw UnsupportedOperationException(
+                "Could not set attribute(s) or the attribute cache for $path. Path was not a FileAttributeCachingPath."
+            )
+        }
 
         val delegatePath = path.delegate
         val delegateProvider = delegatePath.fileSystem.provider()
