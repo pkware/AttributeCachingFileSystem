@@ -1,5 +1,6 @@
 package com.pkware.file.fileAttributeCaching
 
+import com.pkware.file.LazyAttribute
 import com.pkware.file.forwarding.ForwardingPath
 import java.io.IOException
 import java.nio.file.FileSystem
@@ -10,8 +11,6 @@ import java.nio.file.attribute.BasicFileAttributes
 import java.nio.file.attribute.DosFileAttributes
 import java.nio.file.attribute.PosixFileAttributes
 import java.nio.file.spi.FileSystemProvider
-import kotlin.io.path.isDirectory
-import kotlin.io.path.isRegularFile
 
 /**
  * A [Path] instance that supports caching of [BasicFileAttributes] and other classes that extend it such as
@@ -28,17 +27,31 @@ internal class FileAttributeCachingPath(
     private val initializeCache: Boolean = false,
 ) : ForwardingPath(delegate) {
 
-    /**
-     * Controls whether calls to [initializeCache] populate the cache or not. Default is `false`.
-     */
-    var isInitialized = false
+    private var basicAttributes by LazyAttribute {
+        delegate.fileSystem.provider().readAttributes(delegate, BasicFileAttributes::class.java)
+    }
 
-    private var basicAttributes: BasicFileAttributes? = null
-    private var dosAttributes: DosFileAttributes? = null
-    private var posixAttributes: PosixFileAttributes? = null
+    private var dosAttributes by LazyAttribute {
+
+        val provider = delegate.fileSystem.provider()
+        val views = delegate.fileSystem.supportedFileAttributeViews()
+        if (views.contains("dos")) provider.readAttributes(delegate, DosFileAttributes::class.java) else null
+    }
+
+    private var posixAttributes by LazyAttribute {
+
+        val provider = delegate.fileSystem.provider()
+        val views = delegate.fileSystem.supportedFileAttributeViews()
+        if (views.contains("posix")) provider.readAttributes(delegate, PosixFileAttributes::class.java) else null
+    }
 
     init {
-        if (initializeCache) initializeCache()
+        if (initializeCache) {
+            // Force all attributes to be initialized
+            basicAttributes
+            dosAttributes
+            posixAttributes
+        }
     }
 
     override fun getFileSystem(): FileSystem = fileSystem
@@ -123,7 +136,7 @@ internal class FileAttributeCachingPath(
      * @param name The name of the attribute to cache.
      * @param value The attribute value to cache.
      */
-    fun <A : BasicFileAttributes?> setAttributeByName(name: String, value: A?) {
+    fun <A : BasicFileAttributes> setAttributeByName(name: String, value: A?) {
         // remove basic from our attribute name if present as basicFileAttributes can be accessed without that qualifier
 
         // this check is to ensure that we are only storing attribute classes and not specific attributes
@@ -160,10 +173,9 @@ internal class FileAttributeCachingPath(
             } else null
 
             // Can set null values here but that's okay.
-            target.setAttributeByType(BasicFileAttributes::class.java, basicFileAttributes)
-            target.setAttributeByType(DosFileAttributes::class.java, dosFileAttributes)
-            target.setAttributeByType(PosixFileAttributes::class.java, posixFileAttributes)
-            target.isInitialized = isInitialized
+            target.basicAttributes = basicFileAttributes
+            target.dosAttributes = dosFileAttributes
+            target.posixAttributes = posixFileAttributes
         } catch (expected: NoSuchFileException) {
             // swallow NoSuchFileExceptions and skip cache copies for now, since checking if we exist, and if
             // we are a regular file do incur OTHER_IOPS penalties.
@@ -183,33 +195,10 @@ internal class FileAttributeCachingPath(
      */
     @Suppress("UNCHECKED_CAST")
     @Throws(IOException::class, UnsupportedOperationException::class)
-    fun <A : BasicFileAttributes?> getAllAttributesMatchingClass(
-        type: Class<A>,
-    ): A? = when (type) {
-        BasicFileAttributes::class.java -> {
-            if (basicAttributes == null) {
-                basicAttributes = delegate.fileSystem.provider().readAttributes(
-                    delegate, BasicFileAttributes::class.java
-                )
-            }
-            basicAttributes as A
-        }
-        DosFileAttributes::class.java -> {
-            if (dosAttributes == null) {
-                dosAttributes = delegate.fileSystem.provider().readAttributes(
-                    delegate, DosFileAttributes::class.java
-                )
-            }
-            dosAttributes as A
-        }
-        PosixFileAttributes::class.java -> {
-            if (posixAttributes == null) {
-                posixAttributes = delegate.fileSystem.provider().readAttributes(
-                    delegate, PosixFileAttributes::class.java
-                )
-            }
-            posixAttributes as A
-        }
+    fun <A : BasicFileAttributes?> getAllAttributesMatchingClass(type: Class<A>): A? = when (type) {
+        BasicFileAttributes::class.java -> basicAttributes as A
+        DosFileAttributes::class.java -> dosAttributes as A
+        PosixFileAttributes::class.java -> posixAttributes as A
         else -> null
     }
 
@@ -225,9 +214,7 @@ internal class FileAttributeCachingPath(
      * @throws UnsupportedOperationException If the attributes of the given [name] are not supported.
      */
     @Throws(IOException::class, UnsupportedOperationException::class)
-    fun getAllAttributesMatchingName(
-        name: String,
-    ): MutableMap<String, Any>? {
+    fun getAllAttributesMatchingName(name: String): MutableMap<String, Any>? {
 
         var attributeMap = mutableMapOf<String, Any>()
         // remove basic: from our attribute name if present as basicFileAttributes can be accessed without that qualifier
@@ -235,25 +222,10 @@ internal class FileAttributeCachingPath(
 
         // get our attribute class from the cache, should be BasicFileAttributes, DosFileAttributes, or PosixFileAttributes
         val attributeClass = if (checkedName.startsWith("dos")) {
-            if (dosAttributes == null) {
-                dosAttributes = delegate.fileSystem.provider().readAttributes(
-                    delegate, DosFileAttributes::class.java
-                )
-            }
             dosAttributes
         } else if (checkedName.startsWith("posix")) {
-            if (posixAttributes == null) {
-                posixAttributes = delegate.fileSystem.provider().readAttributes(
-                    delegate, PosixFileAttributes::class.java
-                )
-            }
             posixAttributes
         } else {
-            if (basicAttributes == null) {
-                basicAttributes = delegate.fileSystem.provider().readAttributes(
-                    delegate, BasicFileAttributes::class.java
-                )
-            }
             basicAttributes
         }
 
@@ -296,61 +268,5 @@ internal class FileAttributeCachingPath(
         if (attributeMap.isEmpty()) return null
 
         return attributeMap
-    }
-
-    /**
-     * Initializes the attributes of this [FileAttributeCachingPath] instance if it has not already been initialized,
-     * if it is a regular file, and if it exists.
-     */
-    private fun initializeCache() {
-        if (!isInitialized) {
-            try {
-                val delegateFileSystem = delegate.fileSystem
-                val delegateProvider = delegateFileSystem.provider()
-                val supportedViews = delegateFileSystem.supportedFileAttributeViews()
-
-                val basicFileAttributesType = BasicFileAttributes::class.java
-                setAttributeByType(
-                    basicFileAttributesType,
-                    delegateProvider.readAttributes(delegate, basicFileAttributesType)
-                )
-
-                if (supportedViews.contains("dos")) {
-                    val dosFileAttributesType = DosFileAttributes::class.java
-                    setAttributeByType(
-                        dosFileAttributesType,
-                        delegateProvider.readAttributes(delegate, dosFileAttributesType)
-                    )
-                }
-
-                if (supportedViews.contains("posix")) {
-                    val posixFileAttributesType = PosixFileAttributes::class.java
-                    setAttributeByType(
-                        posixFileAttributesType,
-                        delegateProvider.readAttributes(delegate, posixFileAttributesType)
-                    )
-                }
-
-                isInitialized = true
-            } catch (expected: NoSuchFileException) {
-                // swallow NoSuchFileExceptions and skip cache initializations for now, since checking if we exist, and
-                // if we are a regular file do incur OTHER_IOPS penalties.
-            }
-        }
-    }
-
-    /**
-     * Sets the entry for the given attribute `Class` [type] to the given [value].
-     *
-     * @param type The attribute `Class` to set. `Class` types include [BasicFileAttributes], [DosFileAttributes],
-     * or [PosixFileAttributes].
-     * @param value The attribute value to cache. Can be null.
-     */
-    private fun <A : BasicFileAttributes?> setAttributeByType(type: Class<A>, value: A?) {
-        when (type) {
-            BasicFileAttributes::class.java -> basicAttributes = value
-            DosFileAttributes::class.java -> dosAttributes = value as? DosFileAttributes
-            PosixFileAttributes::class.java -> posixAttributes = value as? PosixFileAttributes
-        }
     }
 }

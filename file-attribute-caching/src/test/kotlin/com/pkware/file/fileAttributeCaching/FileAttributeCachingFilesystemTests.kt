@@ -34,9 +34,8 @@ class FileAttributeCachingFilesystemTests {
 
     @ParameterizedTest
     @MethodSource("allFileSystems")
-    fun `cache gets initialized only after file exists and getPath is called`(
-        fileSystem: FileSystem
-    ) {
+    fun `cache gets initialized only after file exists and getPath is called`(fileSystem: FileSystem) {
+
         val tempDirPath = fileSystem.getPath("temp")
         Files.createDirectory(tempDirPath)
         var testPath = fileSystem.getPath("$tempDirPath${fileSystem.separator}testfile.txt")
@@ -51,7 +50,6 @@ class FileAttributeCachingFilesystemTests {
             testPath = it.getPath("$tempDirPath${it.separator}testfile.txt")
             assertThat(testPath).isInstanceOf(FileAttributeCachingPath::class.java)
             val cachingPath = testPath as FileAttributeCachingPath
-            assertThat(cachingPath.isInitialized).isTrue()
 
             // now read attributes from caching path and verify they dont change
             val attributesMap = Files.readAttributes(cachingPath, "*")
@@ -61,9 +59,8 @@ class FileAttributeCachingFilesystemTests {
 
     @ParameterizedTest
     @MethodSource("allFileSystems")
-    fun `cache gets initialized only after file exists and convertToCachingPath is called`(
-        fileSystem: FileSystem
-    ) {
+    fun `cache gets initialized only after file exists and convertToCachingPath is called`(fileSystem: FileSystem) {
+
         val tempDirPath = fileSystem.getPath("temp")
         Files.createDirectory(tempDirPath)
         val testPath = fileSystem.getPath("$tempDirPath${fileSystem.separator}testfile.txt")
@@ -77,7 +74,6 @@ class FileAttributeCachingFilesystemTests {
             var cachingPath = it.convertToCachingPath(testPath)
             assertThat(cachingPath).isInstanceOf(FileAttributeCachingPath::class.java)
             cachingPath = cachingPath as FileAttributeCachingPath
-            assertThat(cachingPath.isInitialized).isTrue()
 
             // now read attributes from caching path and verify they are populated
             val attributesMap = Files.readAttributes(cachingPath, "*")
@@ -99,9 +95,7 @@ class FileAttributeCachingFilesystemTests {
 
     @ParameterizedTest
     @MethodSource("allFileSystems")
-    fun `resolve returns a cachingPath`(
-        fileSystem: FileSystem
-    ) = fileSystem.use { jimfs ->
+    fun `resolve returns a cachingPath`(fileSystem: FileSystem) = fileSystem.use { jimfs ->
         FileAttributeCachingFileSystem.wrapping(jimfs).use {
             val cachingPath = it.getPath("test.txt")
 
@@ -119,9 +113,7 @@ class FileAttributeCachingFilesystemTests {
 
     @ParameterizedTest
     @MethodSource("allFileSystems")
-    fun `getName returns a cachingPath`(
-        fileSystem: FileSystem
-    ) = fileSystem.use { jimfs ->
+    fun `getName returns a cachingPath`(fileSystem: FileSystem) = fileSystem.use { jimfs ->
         FileAttributeCachingFileSystem.wrapping(jimfs).use {
             val cachingPath = it.getPath("test.txt")
             val closestToRootPathName = cachingPath.getName(0)
@@ -132,9 +124,7 @@ class FileAttributeCachingFilesystemTests {
 
     @ParameterizedTest
     @MethodSource("allFileSystems")
-    fun `normalize returns a cachingPath and copies attributes`(
-        fileSystem: FileSystem
-    ) = fileSystem.use { jimfs ->
+    fun `normalize returns a cachingPath and copies attributes`(fileSystem: FileSystem) = fileSystem.use { jimfs ->
         FileAttributeCachingFileSystem.wrapping(jimfs).use {
             val tempParentDirPath = it.getPath("temp")
             val tempDirPath = it.getPath("temp${it.separator}test")
@@ -163,9 +153,7 @@ class FileAttributeCachingFilesystemTests {
 
     @ParameterizedTest
     @MethodSource("allFileSystems")
-    fun `subpath returns a cachingPath`(
-        fileSystem: FileSystem
-    ) = fileSystem.use { jimfs ->
+    fun `subpath returns a cachingPath`(fileSystem: FileSystem) = fileSystem.use { jimfs ->
         FileAttributeCachingFileSystem.wrapping(jimfs).use {
             val tempParentDirPath = it.getPath("temp")
             val tempDirPath = it.getPath("temp${it.separator}test")
@@ -181,9 +169,7 @@ class FileAttributeCachingFilesystemTests {
 
     @ParameterizedTest
     @MethodSource("allFileSystems")
-    fun `resolveSibling returns a cachingPath`(
-        fileSystem: FileSystem
-    ) = fileSystem.use { jimfs ->
+    fun `resolveSibling returns a cachingPath`(fileSystem: FileSystem) = fileSystem.use { jimfs ->
         FileAttributeCachingFileSystem.wrapping(jimfs).use {
             val tempParentDirPath = it.getPath("temp")
             val tempDirPath = it.getPath("temp${it.separator}test")
@@ -199,9 +185,7 @@ class FileAttributeCachingFilesystemTests {
 
     @ParameterizedTest
     @MethodSource("allFileSystems")
-    fun `relativize returns a cachingPath`(
-        fileSystem: FileSystem
-    ) = fileSystem.use { jimfs ->
+    fun `relativize returns a cachingPath`(fileSystem: FileSystem) = fileSystem.use { jimfs ->
         FileAttributeCachingFileSystem.wrapping(jimfs).use {
             val tempGrandparentDirPath = it.getPath("temp")
             val tempParentDirPath = it.getPath("temp${it.separator}test")
@@ -218,9 +202,7 @@ class FileAttributeCachingFilesystemTests {
 
     @ParameterizedTest
     @MethodSource("allFileSystems")
-    fun `toAbsolutePath returns a cachingPath and copies attributes`(
-        fileSystem: FileSystem
-    ) = fileSystem.use { jimfs ->
+    fun `toAbsolutePath returns a cachingPath and copies attributes`(fileSystem: FileSystem) = fileSystem.use { jimfs ->
         FileAttributeCachingFileSystem.wrapping(jimfs).use {
             val cachingPath = it.getPath("test.txt")
             Files.createFile(cachingPath)
@@ -243,9 +225,7 @@ class FileAttributeCachingFilesystemTests {
 
     @ParameterizedTest
     @MethodSource("allFileSystems")
-    fun `toRealPath returns a cachingPath and copies attributes`(
-        fileSystem: FileSystem
-    ) = fileSystem.use { jimfs ->
+    fun `toRealPath returns a cachingPath and copies attributes`(fileSystem: FileSystem) = fileSystem.use { jimfs ->
         FileAttributeCachingFileSystem.wrapping(jimfs).use {
             val cachingPath = it.getPath("test.txt")
             Files.createFile(cachingPath)
@@ -312,9 +292,7 @@ class FileAttributeCachingFilesystemTests {
 
     @ParameterizedTest
     @MethodSource("posixFileSystems")
-    fun `set posix attributes for path`(
-        fileSystem: () -> FileSystem
-    ) = fileSystem().use { jimfs ->
+    fun `set posix attributes for path`(fileSystem: () -> FileSystem) = fileSystem().use { jimfs ->
         FileAttributeCachingFileSystem.wrapping(jimfs).use {
 
             // get file attribute caching path
@@ -354,17 +332,8 @@ class FileAttributeCachingFilesystemTests {
     }
 
     @ParameterizedTest
-    @ValueSource(
-        strings = [
-            "dos:readonly",
-            "dos:hidden",
-            "dos:archive",
-            "dos:archive",
-        ]
-    )
-    fun `set and read dos boolean attributes for path`(
-        attributeName: String,
-    ) = windowsJimfs().use { jimfs ->
+    @ValueSource(strings = ["dos:readonly", "dos:hidden", "dos:archive"])
+    fun `set and read dos boolean attributes for path`(attributeName: String) = windowsJimfs().use { jimfs ->
         FileAttributeCachingFileSystem.wrapping(jimfs).use {
 
             // get file attribute caching path
