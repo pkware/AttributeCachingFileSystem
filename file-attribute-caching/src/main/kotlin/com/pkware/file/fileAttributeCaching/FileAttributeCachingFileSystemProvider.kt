@@ -49,13 +49,9 @@ internal class FileAttributeCachingFileSystemProvider : FileSystemProvider() {
 
     override fun getScheme(): String = "cache"
 
-    override fun newFileSystem(uri: URI, env: MutableMap<String, *>): FileSystem =
-        fileSystems.computeIfAbsent(uri) {
-            FileAttributeCachingFileSystem(
-                env.getValue("filesystem") as FileSystem,
-                this
-            )
-        }
+    override fun newFileSystem(uri: URI, env: MutableMap<String, *>): FileSystem = fileSystems.computeIfAbsent(uri) {
+        FileAttributeCachingFileSystem(env.getValue("filesystem") as FileSystem, this)
+    }
 
     override fun getFileSystem(uri: URI): FileSystem =
         fileSystems[uri] ?: throw FileSystemNotFoundException("Filesystem for $uri not found.")
@@ -66,39 +62,16 @@ internal class FileAttributeCachingFileSystemProvider : FileSystemProvider() {
         path: Path,
         options: MutableSet<out OpenOption>,
         vararg attrs: FileAttribute<*>?
-    ): SeekableByteChannel = if (path is FileAttributeCachingPath) {
-        Files.newByteChannel(path.delegate, options, *attrs)
-    } else {
-        Files.newByteChannel(path, options, *attrs)
+    ): SeekableByteChannel = Files.newByteChannel(path.getUnderlyingPath(), options, *attrs)
+
+    override fun newDirectoryStream(dir: Path, filter: DirectoryStream.Filter<in Path>): DirectoryStream<Path> =
+        Files.newDirectoryStream(dir.getUnderlyingPath(), filter)
+
+    override fun createDirectory(dir: Path, vararg attrs: FileAttribute<*>) {
+        Files.createDirectory(dir.getUnderlyingPath(), *attrs)
     }
 
-    override fun newDirectoryStream(
-        dir: Path,
-        filter: DirectoryStream.Filter<in Path>
-    ): DirectoryStream<Path> = if (dir is FileAttributeCachingPath) {
-        Files.newDirectoryStream(dir.delegate, filter)
-    } else {
-        Files.newDirectoryStream(dir, filter)
-    }
-
-    override fun createDirectory(
-        dir: Path,
-        vararg attrs: FileAttribute<*>
-    ) {
-        if (dir is FileAttributeCachingPath) {
-            Files.createDirectory(dir.delegate, *attrs)
-        } else {
-            Files.createDirectory(dir, *attrs)
-        }
-    }
-
-    override fun delete(path: Path) {
-        if (path is FileAttributeCachingPath) {
-            Files.delete(path.delegate)
-        } else {
-            Files.delete(path)
-        }
-    }
+    override fun delete(path: Path) = Files.delete(path.getUnderlyingPath())
 
     /**
      * Copies [source] to [target] with the specified [options].
@@ -116,8 +89,8 @@ internal class FileAttributeCachingFileSystemProvider : FileSystemProvider() {
     @Suppress("SpreadOperator")
     @Throws(IOException::class)
     override fun copy(source: Path, target: Path, vararg options: CopyOption?) {
-        val actualSourcePath = if (source is FileAttributeCachingPath) source.delegate else source
-        val actualTargetPath = if (target is FileAttributeCachingPath) target.delegate else target
+        val actualSourcePath = source.getUnderlyingPath()
+        val actualTargetPath = target.getUnderlyingPath()
 
         // If we have both target and source caching paths we copy the attributes from source to target and run
         // Files.copy(source, target, *newOptions).
@@ -156,8 +129,8 @@ internal class FileAttributeCachingFileSystemProvider : FileSystemProvider() {
     @Suppress("SpreadOperator")
     @Throws(IOException::class)
     override fun move(source: Path, target: Path, vararg options: CopyOption?) {
-        val actualSourcePath = if (source is FileAttributeCachingPath) source.delegate else source
-        val actualTargetPath = if (target is FileAttributeCachingPath) target.delegate else target
+        val actualSourcePath = source.getUnderlyingPath()
+        val actualTargetPath = target.getUnderlyingPath()
 
         // If we have both target and source caching paths we copy the attributes from source to target and run
         // Files.move(source, target, *newOptions).
@@ -180,12 +153,9 @@ internal class FileAttributeCachingFileSystemProvider : FileSystemProvider() {
         }
     }
 
-    override fun isSameFile(path: Path, path2: Path): Boolean {
-        val actualPath = if (path is FileAttributeCachingPath) path.delegate else path
-        val actualPath2 = if (path2 is FileAttributeCachingPath) path2.delegate else path2
-
-        return Files.isSameFile(actualPath, actualPath2)
-    }
+    override fun isSameFile(path: Path, path2: Path) = Files.isSameFile(
+        path.getUnderlyingPath(), path2.getUnderlyingPath()
+    )
 
     /**
      * Tells whether a file is considered to be hidden. The exact definition of hidden is platform or provider
@@ -221,38 +191,26 @@ internal class FileAttributeCachingFileSystemProvider : FileSystemProvider() {
     }
 
     @Throws(IOException::class)
-    override fun getFileStore(path: Path): FileStore = if (path is FileAttributeCachingPath) {
-        val delegatePath = path.delegate
-        val providerDelegate = delegatePath.fileSystem.provider()
-        providerDelegate.getFileStore(delegatePath)
-    } else {
-        val provider = path.fileSystem.provider()
-        provider.getFileStore(path)
+    override fun getFileStore(path: Path): FileStore {
+
+        val actualPath = path.getUnderlyingPath()
+        return actualPath.fileSystem.provider().getFileStore(actualPath)
     }
 
     @Throws(IOException::class)
     override fun checkAccess(path: Path, vararg modes: AccessMode?) {
-        if (path is FileAttributeCachingPath) {
-            val delegatePath = path.delegate
-            val providerDelegate = delegatePath.fileSystem.provider()
-            providerDelegate.checkAccess(delegatePath, *modes)
-        } else {
-            val provider = path.fileSystem.provider()
-            provider.checkAccess(path, *modes)
-        }
+
+        val actualPath = path.getUnderlyingPath()
+        return actualPath.fileSystem.provider().checkAccess(actualPath, *modes)
     }
 
     override fun <V : FileAttributeView?> getFileAttributeView(
         path: Path,
         type: Class<V>?,
         vararg options: LinkOption?
-    ): V = if (path is FileAttributeCachingPath) {
-        val delegatePath = path.delegate
-        val providerDelegate = delegatePath.fileSystem.provider()
-        providerDelegate.getFileAttributeView(delegatePath, type, *options)
-    } else {
-        val provider = path.fileSystem.provider()
-        provider.getFileAttributeView(path, type, *options)
+    ): V {
+        val actualPath = path.getUnderlyingPath()
+        return actualPath.fileSystem.provider().getFileAttributeView(actualPath, type, *options)
     }
 
     @Throws(
@@ -261,17 +219,9 @@ internal class FileAttributeCachingFileSystemProvider : FileSystemProvider() {
         FileAlreadyExistsException::class,
         IOException::class
     )
-    override fun newFileChannel(
-        path: Path,
-        options: Set<OpenOption?>,
-        vararg attrs: FileAttribute<*>?
-    ): FileChannel = if (path is FileAttributeCachingPath) {
-        val delegatePath = path.delegate
-        val providerDelegate = delegatePath.fileSystem.provider()
-        providerDelegate.newFileChannel(delegatePath, options, *attrs)
-    } else {
-        val provider = path.fileSystem.provider()
-        provider.newFileChannel(path, options, *attrs)
+    override fun newFileChannel(path: Path, options: Set<OpenOption?>, vararg attrs: FileAttribute<*>?): FileChannel {
+        val actualPath = path.getUnderlyingPath()
+        return actualPath.fileSystem.provider().newFileChannel(actualPath, options, *attrs)
     }
 
     @Throws(
@@ -285,13 +235,9 @@ internal class FileAttributeCachingFileSystemProvider : FileSystemProvider() {
         options: Set<OpenOption?>,
         executor: ExecutorService,
         vararg attrs: FileAttribute<*>?
-    ): AsynchronousFileChannel = if (path is FileAttributeCachingPath) {
-        val delegatePath = path.delegate
-        val providerDelegate = delegatePath.fileSystem.provider()
-        providerDelegate.newAsynchronousFileChannel(delegatePath, options, executor, *attrs)
-    } else {
-        val providerDelegate = path.fileSystem.provider()
-        providerDelegate.newAsynchronousFileChannel(path, options, executor, *attrs)
+    ): AsynchronousFileChannel {
+        val actualPath = path.getUnderlyingPath()
+        return actualPath.fileSystem.provider().newAsynchronousFileChannel(actualPath, options, executor, *attrs)
     }
 
     @Throws(
@@ -305,27 +251,13 @@ internal class FileAttributeCachingFileSystemProvider : FileSystemProvider() {
         Files.createSymbolicLink(actualLinkPath, actualTargetPath, *attrs)
     }
 
-    @Throws(
-        UnsupportedOperationException::class,
-        FileAlreadyExistsException::class,
-        IOException::class
-    )
+    @Throws(UnsupportedOperationException::class, FileAlreadyExistsException::class, IOException::class)
     override fun createLink(link: Path, existing: Path) {
-        val actualLinkPath = if (link is FileAttributeCachingPath) link.delegate else link
-        val actualExistingPath = if (existing is FileAttributeCachingPath) existing.delegate else existing
-        Files.createLink(actualLinkPath, actualExistingPath)
+        Files.createLink(link.getUnderlyingPath(), existing.getUnderlyingPath())
     }
 
-    @Throws(
-        UnsupportedOperationException::class,
-        NotLinkException::class,
-        IOException::class
-    )
-    override fun readSymbolicLink(link: Path): Path? = if (link is FileAttributeCachingPath) {
-        Files.readSymbolicLink(link.delegate)
-    } else {
-        Files.readSymbolicLink(link)
-    }
+    @Throws(UnsupportedOperationException::class, NotLinkException::class, IOException::class)
+    override fun readSymbolicLink(link: Path): Path? = Files.readSymbolicLink(link.getUnderlyingPath())
 
     /**
      * Read file attributes specified by the attribute `Class` [type] from the incoming [path]. If the returned
@@ -407,33 +339,32 @@ internal class FileAttributeCachingFileSystemProvider : FileSystemProvider() {
      */
     @Throws(IOException::class, UnsupportedOperationException::class, IllegalArgumentException::class)
     override fun setAttribute(path: Path, attribute: String, value: Any?, vararg options: LinkOption) {
-        if (path is FileAttributeCachingPath) {
-            val delegatePath = path.delegate
-            val delegateProvider = delegatePath.fileSystem.provider()
 
-            // Always set delegate attribute(s) first with real file IO
-            delegateProvider.setAttribute(delegatePath, attribute, value, *options)
+        if (path !is FileAttributeCachingPath) throw UnsupportedOperationException(
+            "Could not set attribute(s) or the attribute cache for $path. Path was not a FileAttributeCachingPath."
+        )
 
-            // Then set our cache
-            // Need to make sure that we only supply class names to path.setAttributeByName
-            // cannot set single attribute in the cache
-            val attributeClassName: String = if (attribute.startsWith("dos")) {
-                "dos:*"
-            } else if (attribute.startsWith("posix")) {
-                "posix:*"
-            } else {
-                "*"
-            }
+        val delegatePath = path.delegate
+        val delegateProvider = delegatePath.fileSystem.provider()
 
-            // Even if we have a single attribute only we should get the entire attribute class for that single
-            // attribute to properly set the cache.
-            val attributesObject = getAttributesClassFromPathProvider(path, attributeClassName)
-            path.setAttributeByName(attributeClassName, attributesObject)
+        // Always set delegate attribute(s) first with real file IO
+        delegateProvider.setAttribute(delegatePath, attribute, value, *options)
+
+        // Then set our cache
+        // Need to make sure that we only supply class names to path.setAttributeByName
+        // cannot set single attribute in the cache
+        val attributeClassName: String = if (attribute.startsWith("dos")) {
+            "dos:*"
+        } else if (attribute.startsWith("posix")) {
+            "posix:*"
         } else {
-            throw UnsupportedOperationException(
-                "Could not set attribute(s) or the attribute cache for $path. Path was not a FileAttributeCachingPath."
-            )
+            "*"
         }
+
+        // Even if we have a single attribute only we should get the entire attribute class for that single
+        // attribute to properly set the cache.
+        val attributesObject = getAttributesClassFromPathProvider(path, attributeClassName)
+        path.setAttributeByName(attributeClassName, attributesObject)
     }
 
     /**
@@ -462,4 +393,10 @@ internal class FileAttributeCachingFileSystemProvider : FileSystemProvider() {
         }
         return attributeView?.readAttributes()
     }
+
+    /**
+     * Returns this path's [FileAttributeCachingPath.delegate] if it is an instance of a [FileAttributeCachingPath],
+     * otherwise returns the path instance.
+     */
+    private fun Path.getUnderlyingPath(): Path = if (this is FileAttributeCachingPath) delegate else this
 }
