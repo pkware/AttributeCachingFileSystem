@@ -58,7 +58,7 @@ internal class FileAttributeCachingFileSystemProvider : FileSystemProvider() {
         }
 
     override fun getFileSystem(uri: URI): FileSystem =
-        fileSystems[uri] ?: throw FileSystemNotFoundException("Filesystem for $uri not found")
+        fileSystems[uri] ?: throw FileSystemNotFoundException("Filesystem for $uri not found.")
 
     override fun getPath(uri: URI): Path = Paths.get(uri)
 
@@ -207,7 +207,7 @@ internal class FileAttributeCachingFileSystemProvider : FileSystemProvider() {
     override fun isHidden(path: Path): Boolean = if (path is FileAttributeCachingPath) {
         if (isWindowsOS) {
             val attributesMap = path.getAllAttributesMatchingName("dos:*") ?: throw IOException(
-                "Could not get dos attributes from delegate filesystem."
+                "Could not get dos attributes of $path from delegate filesystem."
             )
             val isHidden = attributesMap["dos:hidden"] as Boolean && !(attributesMap["directory"] as Boolean)
             isHidden
@@ -217,7 +217,7 @@ internal class FileAttributeCachingFileSystemProvider : FileSystemProvider() {
             delegateProvider.isHidden(delegatePath)
         }
     } else {
-        throw IOException("Path was not a FileAttributeCachingPath, could not read hidden status.")
+        path.fileSystem.provider().isHidden(path)
     }
 
     @Throws(IOException::class)
@@ -352,11 +352,11 @@ internal class FileAttributeCachingFileSystemProvider : FileSystemProvider() {
         vararg options: LinkOption
     ): A = if (path is FileAttributeCachingPath) {
         val attributes = path.getAllAttributesMatchingClass(type) ?: throw UnsupportedOperationException(
-            "Could not read attributes from delegate filesystem."
+            "Could not read attributes of type $type from the path $path and its delegate filesystem."
         )
         attributes
     } else {
-        throw IOException("Path was not a FileAttributeCachingPath, could not read attributes.")
+        path.fileSystem.provider().readAttributes(path, type, *options)
     }
 
     /**
@@ -384,11 +384,11 @@ internal class FileAttributeCachingFileSystemProvider : FileSystemProvider() {
         vararg options: LinkOption
     ): MutableMap<String, Any> = if (path is FileAttributeCachingPath) {
         val attributesMap = path.getAllAttributesMatchingName(attributes) ?: throw IllegalArgumentException(
-            "Could not read attributes from delegate filesystem."
+            "Could not read attributes $attributes of the path $path from the delegate filesystem."
         )
         attributesMap
     } else {
-        throw UnsupportedOperationException("Path was not a FileAttributeCachingPath, could not read attributes.")
+        path.fileSystem.provider().readAttributes(path, attributes, *options)
     }
 
     /**
@@ -431,7 +431,7 @@ internal class FileAttributeCachingFileSystemProvider : FileSystemProvider() {
             path.setAttributeByName(attributeClassName, attributesObject)
         } else {
             throw UnsupportedOperationException(
-                "Path was not a FileAttributeCachingPath, could not set attribute cache."
+                "Could not set attribute(s) or the attribute cache for $path. Path was not a FileAttributeCachingPath."
             )
         }
     }
