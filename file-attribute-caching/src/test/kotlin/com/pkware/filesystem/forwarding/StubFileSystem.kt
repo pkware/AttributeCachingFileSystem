@@ -1,4 +1,4 @@
-package com.pkware.file.forwarding
+package com.pkware.filesystem.forwarding
 
 import java.nio.file.FileSystem
 

@@ -1,4 +1,4 @@
-package com.pkware.file.forwarding
+package com.pkware.filesystem.forwarding
 
 import java.net.URI
 import java.nio.channels.SeekableByteChannel

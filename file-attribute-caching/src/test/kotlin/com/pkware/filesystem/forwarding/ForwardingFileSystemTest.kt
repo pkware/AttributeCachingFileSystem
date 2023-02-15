@@ -1,4 +1,4 @@
-package com.pkware.file.forwarding
+package com.pkware.filesystem.forwarding
 
 import com.google.common.truth.Truth.assertThat
 import org.junit.jupiter.api.Test
