@@ -1,10 +1,11 @@
-package com.pkware.file.fileAttributeCaching
+package com.pkware.filesystem.attributecaching
 
 import com.google.common.truth.ComparableSubject
 import com.google.common.truth.Truth.assertThat
 import org.apache.commons.io.IOUtils
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertDoesNotThrow
+import org.junit.jupiter.api.assertThrows
 import org.junit.jupiter.api.condition.DisabledOnOs
 import org.junit.jupiter.api.condition.OS
 import org.junit.jupiter.params.ParameterizedTest
@@ -16,6 +17,7 @@ import java.nio.file.CopyOption
 import java.nio.file.FileSystem
 import java.nio.file.FileSystems
 import java.nio.file.Files
+import java.nio.file.NoSuchFileException
 import java.nio.file.StandardCopyOption
 import java.nio.file.attribute.BasicFileAttributes
 import java.nio.file.attribute.DosFileAttributes
@@ -30,10 +32,60 @@ import java.util.EnumSet
 import java.util.stream.Stream
 import kotlin.io.path.exists
 
-class FileAttributeCachingFilesystemTests {
+class AttributeCachingFileSystemTests {
+
+    @ParameterizedTest
+    @MethodSource("allFileSystems")
+    fun `cache gets initialized only after file exists and getPath is called`(fileSystem: FileSystem) {
+        val tempDirPath = fileSystem.getPath("temp")
+        Files.createDirectory(tempDirPath)
+        var testPath = fileSystem.getPath("$tempDirPath${fileSystem.separator}testfile.txt")
+        Files.createFile(testPath)
+
+        AttributeCachingFileSystem.wrapping(fileSystem).use {
+
+            assertThat(testPath).isNotInstanceOf(AttributeCachingPath::class.java)
+
+            // get filesystem attribute caching path
+            // get tha path again, it should now initialize since it exists
+            testPath = it.getPath("$tempDirPath${it.separator}testfile.txt")
+            assertThat(testPath).isInstanceOf(AttributeCachingPath::class.java)
+            val cachingPath = testPath as AttributeCachingPath
+            assertThat(cachingPath.isCachedInitialized()).isTrue()
+
+            // now read attributes from caching path and verify they dont change
+            val attributesMap = Files.readAttributes(cachingPath, "*")
+            assertThat(attributesMap).isNotEmpty()
+        }
+    }
+
+    @ParameterizedTest
+    @MethodSource("allFileSystems")
+    fun `cache gets initialized only after file exists and convertToCachingPath is called`(fileSystem: FileSystem) {
+        val tempDirPath = fileSystem.getPath("temp")
+        Files.createDirectory(tempDirPath)
+        val testPath = fileSystem.getPath("$tempDirPath${fileSystem.separator}testfile.txt")
+        Files.createFile(testPath)
+
+        AttributeCachingFileSystem.wrapping(fileSystem).use {
+
+            assertThat(testPath).isNotInstanceOf(AttributeCachingPath::class.java)
+
+            // get and verify filesystem attribute caching path
+            var cachingPath = it.convertToCachingPath(testPath)
+            assertThat(cachingPath).isInstanceOf(AttributeCachingPath::class.java)
+            cachingPath = cachingPath as AttributeCachingPath
+            assertThat(cachingPath.isCachedInitialized()).isTrue()
+
+            // now read attributes from caching path and verify they are populated
+            val attributesMap = Files.readAttributes(cachingPath, "*")
+            assertThat(attributesMap).isNotEmpty()
+        }
+    }
+
     @Test
     fun `create java io tmpdir file with default filesystem wrapped by file attribute caching filesystem`() {
-        FileAttributeCachingFileSystem.wrapping(FileSystems.getDefault()).use {
+        AttributeCachingFileSystem.wrapping(FileSystems.getDefault()).use {
             assertDoesNotThrow {
                 val javaTmpPath = it.getPath(System.getProperty("java.io.tmpdir"))
                 val tempFilePath = Files.createTempFile(javaTmpPath, "test", ".txt")
@@ -45,10 +97,8 @@ class FileAttributeCachingFilesystemTests {
 
     @ParameterizedTest
     @MethodSource("allFileSystems")
-    fun `resolve returns a cachingPath`(
-        fileSystem: FileSystem
-    ) = fileSystem.use { jimfs ->
-        FileAttributeCachingFileSystem.wrapping(jimfs).use {
+    fun `resolve returns a cachingPath`(fileSystem: FileSystem) = fileSystem.use { jimfs ->
+        AttributeCachingFileSystem.wrapping(jimfs).use {
             val cachingPath = it.getPath("test.txt")
 
             Files.createFile(cachingPath)
@@ -58,30 +108,26 @@ class FileAttributeCachingFilesystemTests {
             val otherPath = jimfs.getPath("temp")
             Files.createDirectory(otherPath)
             val resolvedPath = cachingPath.resolve(otherPath)
-            assertThat(cachingPath).isInstanceOf(FileAttributeCachingPath::class.java)
-            assertThat(resolvedPath).isInstanceOf(FileAttributeCachingPath::class.java)
+            assertThat(cachingPath).isInstanceOf(AttributeCachingPath::class.java)
+            assertThat(resolvedPath).isInstanceOf(AttributeCachingPath::class.java)
         }
     }
 
     @ParameterizedTest
     @MethodSource("allFileSystems")
-    fun `getName returns a cachingPath`(
-        fileSystem: FileSystem
-    ) = fileSystem.use { jimfs ->
-        FileAttributeCachingFileSystem.wrapping(jimfs).use {
+    fun `getName returns a cachingPath`(fileSystem: FileSystem) = fileSystem.use { jimfs ->
+        AttributeCachingFileSystem.wrapping(jimfs).use {
             val cachingPath = it.getPath("test.txt")
             val closestToRootPathName = cachingPath.getName(0)
-            assertThat(cachingPath).isInstanceOf(FileAttributeCachingPath::class.java)
-            assertThat(closestToRootPathName).isInstanceOf(FileAttributeCachingPath::class.java)
+            assertThat(cachingPath).isInstanceOf(AttributeCachingPath::class.java)
+            assertThat(closestToRootPathName).isInstanceOf(AttributeCachingPath::class.java)
         }
     }
 
     @ParameterizedTest
     @MethodSource("allFileSystems")
-    fun `normalize returns a cachingPath and copies attributes`(
-        fileSystem: FileSystem
-    ) = fileSystem.use { jimfs ->
-        FileAttributeCachingFileSystem.wrapping(jimfs).use {
+    fun `normalize returns a cachingPath and copies attributes`(fileSystem: FileSystem) = fileSystem.use { jimfs ->
+        AttributeCachingFileSystem.wrapping(jimfs).use {
             val tempParentDirPath = it.getPath("temp")
             val tempDirPath = it.getPath("temp${it.separator}test")
             Files.createDirectory(tempParentDirPath)
@@ -97,8 +143,8 @@ class FileAttributeCachingFilesystemTests {
             Files.setAttribute(cachingPath, "lastModifiedTime", testDateFileTime)
 
             val normalizedPath = cachingPath.normalize()
-            assertThat(cachingPath).isInstanceOf(FileAttributeCachingPath::class.java)
-            assertThat(normalizedPath).isInstanceOf(FileAttributeCachingPath::class.java)
+            assertThat(cachingPath).isInstanceOf(AttributeCachingPath::class.java)
+            assertThat(normalizedPath).isInstanceOf(AttributeCachingPath::class.java)
 
             // now read attributes from absolutePath path
             val attributesMap = Files.readAttributes(normalizedPath, "*")
@@ -109,10 +155,8 @@ class FileAttributeCachingFilesystemTests {
 
     @ParameterizedTest
     @MethodSource("allFileSystems")
-    fun `subpath returns a cachingPath`(
-        fileSystem: FileSystem
-    ) = fileSystem.use { jimfs ->
-        FileAttributeCachingFileSystem.wrapping(jimfs).use {
+    fun `subpath returns a cachingPath`(fileSystem: FileSystem) = fileSystem.use { jimfs ->
+        AttributeCachingFileSystem.wrapping(jimfs).use {
             val tempParentDirPath = it.getPath("temp")
             val tempDirPath = it.getPath("temp${it.separator}test")
             Files.createDirectory(tempParentDirPath)
@@ -120,17 +164,15 @@ class FileAttributeCachingFilesystemTests {
             val cachingPath = it.getPath("$tempDirPath${it.separator}test.txt")
             val nameCount = cachingPath.nameCount
             val subPath = cachingPath.subpath(nameCount - 2, nameCount - 1)
-            assertThat(cachingPath).isInstanceOf(FileAttributeCachingPath::class.java)
-            assertThat(subPath).isInstanceOf(FileAttributeCachingPath::class.java)
+            assertThat(cachingPath).isInstanceOf(AttributeCachingPath::class.java)
+            assertThat(subPath).isInstanceOf(AttributeCachingPath::class.java)
         }
     }
 
     @ParameterizedTest
     @MethodSource("allFileSystems")
-    fun `resolveSibling returns a cachingPath`(
-        fileSystem: FileSystem
-    ) = fileSystem.use { jimfs ->
-        FileAttributeCachingFileSystem.wrapping(jimfs).use {
+    fun `resolveSibling returns a cachingPath`(fileSystem: FileSystem) = fileSystem.use { jimfs ->
+        AttributeCachingFileSystem.wrapping(jimfs).use {
             val tempParentDirPath = it.getPath("temp")
             val tempDirPath = it.getPath("temp${it.separator}test")
             Files.createDirectory(tempParentDirPath)
@@ -138,17 +180,15 @@ class FileAttributeCachingFilesystemTests {
             val cachingPath = it.getPath("$tempDirPath${it.separator}test.txt")
             val otherPath = it.getPath("test2.txt")
             val resolvedSiblingPath = cachingPath.resolveSibling(otherPath)
-            assertThat(cachingPath).isInstanceOf(FileAttributeCachingPath::class.java)
-            assertThat(resolvedSiblingPath).isInstanceOf(FileAttributeCachingPath::class.java)
+            assertThat(cachingPath).isInstanceOf(AttributeCachingPath::class.java)
+            assertThat(resolvedSiblingPath).isInstanceOf(AttributeCachingPath::class.java)
         }
     }
 
     @ParameterizedTest
     @MethodSource("allFileSystems")
-    fun `relativize returns a cachingPath`(
-        fileSystem: FileSystem
-    ) = fileSystem.use { jimfs ->
-        FileAttributeCachingFileSystem.wrapping(jimfs).use {
+    fun `relativize returns a cachingPath`(fileSystem: FileSystem) = fileSystem.use { jimfs ->
+        AttributeCachingFileSystem.wrapping(jimfs).use {
             val tempGrandparentDirPath = it.getPath("temp")
             val tempParentDirPath = it.getPath("temp${it.separator}test")
             val tempDirPath = it.getPath("temp${it.separator}test${it.separator}test2")
@@ -157,17 +197,15 @@ class FileAttributeCachingFilesystemTests {
             Files.createDirectory(tempDirPath)
             val cachingPath = it.getPath("$tempParentDirPath${it.separator}test.txt")
             val relativizedPath = cachingPath.relativize(tempDirPath)
-            assertThat(cachingPath).isInstanceOf(FileAttributeCachingPath::class.java)
-            assertThat(relativizedPath).isInstanceOf(FileAttributeCachingPath::class.java)
+            assertThat(cachingPath).isInstanceOf(AttributeCachingPath::class.java)
+            assertThat(relativizedPath).isInstanceOf(AttributeCachingPath::class.java)
         }
     }
 
     @ParameterizedTest
     @MethodSource("allFileSystems")
-    fun `toAbsolutePath returns a cachingPath and copies attributes`(
-        fileSystem: FileSystem
-    ) = fileSystem.use { jimfs ->
-        FileAttributeCachingFileSystem.wrapping(jimfs).use {
+    fun `toAbsolutePath returns a cachingPath and copies attributes`(fileSystem: FileSystem) = fileSystem.use { jimfs ->
+        AttributeCachingFileSystem.wrapping(jimfs).use {
             val cachingPath = it.getPath("test.txt")
             Files.createFile(cachingPath)
             Files.newOutputStream(cachingPath).use { outputStream ->
@@ -177,8 +215,8 @@ class FileAttributeCachingFilesystemTests {
             Files.setAttribute(cachingPath, "lastModifiedTime", testDateFileTime)
 
             val absolutePath = cachingPath.toAbsolutePath()
-            assertThat(cachingPath).isInstanceOf(FileAttributeCachingPath::class.java)
-            assertThat(absolutePath).isInstanceOf(FileAttributeCachingPath::class.java)
+            assertThat(cachingPath).isInstanceOf(AttributeCachingPath::class.java)
+            assertThat(absolutePath).isInstanceOf(AttributeCachingPath::class.java)
 
             // now read attributes from absolutePath path
             val attributesMap = Files.readAttributes(absolutePath, "*")
@@ -189,10 +227,8 @@ class FileAttributeCachingFilesystemTests {
 
     @ParameterizedTest
     @MethodSource("allFileSystems")
-    fun `toRealPath returns a cachingPath and copies attributes`(
-        fileSystem: FileSystem
-    ) = fileSystem.use { jimfs ->
-        FileAttributeCachingFileSystem.wrapping(jimfs).use {
+    fun `toRealPath returns a cachingPath and copies attributes`(fileSystem: FileSystem) = fileSystem.use { jimfs ->
+        AttributeCachingFileSystem.wrapping(jimfs).use {
             val cachingPath = it.getPath("test.txt")
             Files.createFile(cachingPath)
             Files.newOutputStream(cachingPath).use { outputStream ->
@@ -202,8 +238,8 @@ class FileAttributeCachingFilesystemTests {
             Files.setAttribute(cachingPath, "lastModifiedTime", testDateFileTime)
 
             val realPath = cachingPath.toRealPath()
-            assertThat(cachingPath).isInstanceOf(FileAttributeCachingPath::class.java)
-            assertThat(realPath).isInstanceOf(FileAttributeCachingPath::class.java)
+            assertThat(cachingPath).isInstanceOf(AttributeCachingPath::class.java)
+            assertThat(realPath).isInstanceOf(AttributeCachingPath::class.java)
 
             // now read attributes from absolutePath path
             val attributesMap = Files.readAttributes(realPath, "*")
@@ -218,15 +254,14 @@ class FileAttributeCachingFilesystemTests {
         type: Class<A>,
         fileSystem: () -> FileSystem
     ) = fileSystem().use { jimfs ->
-        FileAttributeCachingFileSystem.wrapping(jimfs).use {
-
-            // get file attribute caching path
+        AttributeCachingFileSystem.wrapping(jimfs).use {
+            // get filesystem attribute caching path
             val cachingPath = it.getPath("testfile.txt")
             Files.createFile(cachingPath)
             Files.newOutputStream(cachingPath).use { outputStream ->
                 outputStream.write("hello".toByteArray(Charsets.UTF_8))
             }
-            // read file attributes for path from provider with the given class type
+            // read filesystem attributes for path from provider with the given class type
             val attributes = Files.readAttributes(cachingPath, type)
             // verify that attribute is "right" type returned from the provider
             assertThat(attributes).isInstanceOf(type)
@@ -235,35 +270,50 @@ class FileAttributeCachingFilesystemTests {
 
     @ParameterizedTest
     @MethodSource("allNames")
+    fun `verify read attributes throws NoSuchFileException on a file that doesn't exist`(
+        attributes: String,
+        fileSystem: () -> FileSystem,
+    ) = fileSystem().use { jimfs ->
+        AttributeCachingFileSystem.wrapping(jimfs).use {
+            val file = it.getPath("xls.xls")
+            val e = assertThrows<NoSuchFileException> { Files.readAttributes(file, attributes) }
+            assertThat(e).hasMessageThat().contains("xls.xls")
+        }
+    }
+
+    @ParameterizedTest
+    @MethodSource("allNamesWithMapVerification")
     fun `read attributes by name from provider`(
         attributeName: String,
         expectedMapSize: Int,
+        attributeViewName: String,
         fileSystem: () -> FileSystem
     ) = fileSystem().use { jimfs ->
-        FileAttributeCachingFileSystem.wrapping(jimfs).use {
-
-            // get file attribute caching path
+        AttributeCachingFileSystem.wrapping(jimfs).use {
+            // get filesystem attribute caching path
             val cachingPath = it.getPath("testfile.txt")
             Files.createFile(cachingPath)
             Files.newOutputStream(cachingPath).use { outputStream ->
                 outputStream.write("hello".toByteArray(Charsets.UTF_8))
             }
-            // read file attributes for path from provider with the given name
+            // read filesystem attributes for path from provider with the given name
             val attributesMap = Files.readAttributes(cachingPath, attributeName)
             // verify that attribute is "right" type returned from the provider
             assertThat(attributesMap).isInstanceOf(MutableMap::class.java)
             assertThat(attributesMap.size).isEqualTo(expectedMapSize)
+            // verify attribute map keys do not contain the attribute view qualifier (attributeViewName)
+            for (entry in attributesMap) {
+                assertThat(entry.key).doesNotContain(attributeViewName)
+            }
         }
     }
 
     @ParameterizedTest
     @MethodSource("posixFileSystems")
-    fun `set posix attributes for path`(
-        fileSystem: () -> FileSystem
-    ) = fileSystem().use { jimfs ->
-        FileAttributeCachingFileSystem.wrapping(jimfs).use {
+    fun `set posix attributes for path`(fileSystem: () -> FileSystem) = fileSystem().use { jimfs ->
+        AttributeCachingFileSystem.wrapping(jimfs).use {
 
-            // get file attribute caching path
+            // get filesystem attribute caching path
             val cachingPath = it.getPath("testfile.txt")
             Files.createFile(cachingPath)
             Files.newOutputStream(cachingPath).use { outputStream ->
@@ -286,13 +336,13 @@ class FileAttributeCachingFilesystemTests {
             val attributesMap = Files.readAttributes(cachingPath, "posix:*")
 
             assertThat(attributesMap.size).isEqualTo(12)
-            val ownerUserPrincipal = attributesMap["posix:owner"] as UserPrincipal
+            val ownerUserPrincipal = attributesMap["owner"] as UserPrincipal
             assertThat(ownerUserPrincipal.name).isEqualTo(owner.name)
-            val groupUserPrincipal = attributesMap["posix:group"] as GroupPrincipal
+            val groupUserPrincipal = attributesMap["group"] as GroupPrincipal
             assertThat(groupUserPrincipal.name).isEqualTo(group.name)
             @Suppress("UNCHECKED_CAST")
             assertThat(
-                PosixFilePermissions.toString(attributesMap["posix:permissions"] as? MutableSet<PosixFilePermission>)
+                PosixFilePermissions.toString(attributesMap["permissions"] as? MutableSet<PosixFilePermission>)
             ).isEqualTo(
                 PosixFilePermissions.toString(permissions)
             )
@@ -300,20 +350,11 @@ class FileAttributeCachingFilesystemTests {
     }
 
     @ParameterizedTest
-    @ValueSource(
-        strings = [
-            "dos:readonly",
-            "dos:hidden",
-            "dos:archive",
-            "dos:archive",
-        ]
-    )
-    fun `set and read dos boolean attributes for path`(
-        attributeName: String,
-    ) = windowsJimfs().use { jimfs ->
-        FileAttributeCachingFileSystem.wrapping(jimfs).use {
+    @ValueSource(strings = ["dos:readonly", "dos:hidden", "dos:archive"])
+    fun `set and read dos boolean attributes for path`(attributeName: String) = windowsJimfs().use { jimfs ->
+        AttributeCachingFileSystem.wrapping(jimfs).use {
 
-            // get file attribute caching path
+            // get filesystem attribute caching path
             val cachingPath = it.getPath("testfile.txt")
             Files.createFile(cachingPath)
             Files.newOutputStream(cachingPath).use { outputStream ->
@@ -324,7 +365,9 @@ class FileAttributeCachingFilesystemTests {
             val attributesMap = Files.readAttributes(cachingPath, attributeName)
 
             assertThat(attributesMap.size).isEqualTo(1)
-            assertThat(attributesMap[attributeName]).isEqualTo(true)
+
+            val maplookUpAttributeName = attributeName.substringAfter("dos:")
+            assertThat(attributesMap[maplookUpAttributeName]).isEqualTo(true)
         }
     }
 
@@ -335,9 +378,9 @@ class FileAttributeCachingFilesystemTests {
     ) {
         val tempDirPath = fileSystem.getPath("temp")
 
-        FileAttributeCachingFileSystem.wrapping(fileSystem).use {
+        AttributeCachingFileSystem.wrapping(fileSystem).use {
 
-            // get file attribute caching path
+            // get filesystem attribute caching path
             Files.createDirectory(tempDirPath)
             val cachingPath = it.getPath("$tempDirPath${it.separator}testfile.txt")
             Files.createFile(cachingPath)
@@ -384,8 +427,8 @@ class FileAttributeCachingFilesystemTests {
         option: CopyOption,
         fileSystem: () -> FileSystem
     ) = fileSystem().use { jimfs ->
-        FileAttributeCachingFileSystem.wrapping(jimfs).use {
-            // get file attribute caching path
+        AttributeCachingFileSystem.wrapping(jimfs).use {
+            // get filesystem attribute caching path
             val cachingPath = it.getPath("testfile.txt")
             Files.createFile(cachingPath)
             Files.newOutputStream(cachingPath).use { outputStream ->
@@ -425,8 +468,8 @@ class FileAttributeCachingFilesystemTests {
         option: CopyOption,
         fileSystem: () -> FileSystem
     ) = fileSystem().use { jimfs ->
-        FileAttributeCachingFileSystem.wrapping(jimfs).use {
-            // get file attribute caching path
+        AttributeCachingFileSystem.wrapping(jimfs).use {
+            // get filesystem attribute caching path
             val cachingPath = it.getPath("testfile.txt")
             Files.createFile(cachingPath)
             Files.newOutputStream(cachingPath).use { outputStream ->
@@ -464,7 +507,7 @@ class FileAttributeCachingFilesystemTests {
     @ParameterizedTest
     @MethodSource("hiddenTestPathsWindows")
     fun `file isHidden on windows`(fileName: String, expectedHidden: Boolean) = windowsJimfs().use { jimfs ->
-        FileAttributeCachingFileSystem.wrapping(jimfs).use {
+        AttributeCachingFileSystem.wrapping(jimfs).use {
             val directoryName = "temp"
             Files.createDirectory(it.getPath(directoryName))
             val cachingPath = it.getPath(directoryName, fileName)
@@ -487,7 +530,7 @@ class FileAttributeCachingFilesystemTests {
         expectedHidden: Boolean,
         fileSystem: () -> FileSystem
     ) = fileSystem().use { jimfs ->
-        FileAttributeCachingFileSystem.wrapping(jimfs).use {
+        AttributeCachingFileSystem.wrapping(jimfs).use {
             val directoryName = "temp"
             Files.createDirectory(it.getPath(directoryName))
             val cachingPath = it.getPath(directoryName, fileName)
@@ -505,11 +548,30 @@ class FileAttributeCachingFilesystemTests {
         )
 
         @JvmStatic
+        fun allNamesWithMapVerification(): Stream<Arguments> = Stream.of(
+            arguments("*", 9, "basic", ::windowsJimfs),
+            arguments("size", 1, "basic", ::windowsJimfs),
+            arguments("size,lastModifiedTime,lastAccessTime", 3, "basic", ::windowsJimfs),
+            arguments("basic:*", 9, "basic", ::windowsJimfs),
+            arguments("basic:size", 1, "basic", ::windowsJimfs),
+            arguments("basic:size,lastModifiedTime,lastAccessTime", 3, "basic", ::windowsJimfs),
+            arguments("dos:*,", 13, "dos", ::windowsJimfs),
+            arguments("dos:readonly", 1, "dos", ::windowsJimfs),
+            arguments("dos:hidden,system,readonly", 3, "dos", ::windowsJimfs),
+            arguments("posix:*", 12, "posix", ::linuxJimfs),
+            arguments("posix:group", 1, "posix", ::linuxJimfs),
+            arguments("posix:owner,group,permissions", 3, "posix", ::linuxJimfs),
+            arguments("posix:*", 12, "posix", ::osXJimfs),
+            arguments("posix:group", 1, "posix", ::osXJimfs),
+            arguments("posix:owner,group,permissions", 3, "posix", ::osXJimfs),
+        )
+
+        @JvmStatic
         fun allNames(): Stream<Arguments> = Stream.of(
-            arguments("*", 9, ::windowsJimfs),
-            arguments("dos:*", 13, ::windowsJimfs),
-            arguments("posix:*", 12, ::linuxJimfs),
-            arguments("posix:*", 12, ::osXJimfs),
+            arguments("*", ::windowsJimfs),
+            arguments("dos:*", ::windowsJimfs),
+            arguments("posix:*", ::linuxJimfs),
+            arguments("posix:*", ::osXJimfs),
         )
 
         @JvmStatic
@@ -528,7 +590,7 @@ class FileAttributeCachingFilesystemTests {
         @JvmStatic
         fun hiddenTestPathsWindows(): Stream<Arguments> = Stream.of(
             arguments("test1.txt", true),
-            // blank file name for a directory, directories can never be hidden
+            // blank filesystem name for a directory, directories can never be hidden
             arguments("", false),
         )
 

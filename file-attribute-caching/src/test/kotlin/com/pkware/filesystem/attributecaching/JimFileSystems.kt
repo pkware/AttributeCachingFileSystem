@@ -1,4 +1,4 @@
-package com.pkware.file.fileAttributeCaching
+package com.pkware.filesystem.attributecaching
 
 import com.google.common.jimfs.Configuration
 import com.google.common.jimfs.Jimfs

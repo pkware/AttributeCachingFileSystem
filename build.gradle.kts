@@ -11,7 +11,7 @@ subprojects {
     apply(plugin = "org.jlleitschuh.gradle.ktlint")
     apply(plugin = "io.gitlab.arturbosch.detekt")
 
-    group = "com.pkware.file"
+    group = "com.pkware.filesystem"
 
     val kotlinJvmTarget = "1.8"
 
