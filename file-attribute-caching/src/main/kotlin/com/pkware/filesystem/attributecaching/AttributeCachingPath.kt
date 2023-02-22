@@ -72,6 +72,24 @@ internal class AttributeCachingPath(
 
     override fun getFileSystem(): FileSystem = fileSystem
 
+    override fun getRoot(): Path? = if (delegate.root != null && delegate.root !is AttributeCachingPath) {
+        AttributeCachingPath(fileSystem, delegate.root)
+    } else {
+        delegate.root
+    }
+
+    override fun getFileName(): Path? = if (delegate.fileName != null && delegate.fileName !is AttributeCachingPath) {
+        AttributeCachingPath(fileSystem, delegate.fileName)
+    } else {
+        delegate.fileName
+    }
+
+    override fun getParent(): Path? = if (delegate.parent != null && delegate.parent !is AttributeCachingPath) {
+        AttributeCachingPath(fileSystem, delegate.parent)
+    } else {
+        delegate.parent
+    }
+
     override fun resolve(other: Path): Path {
         // Make sure if other is a AttributeCachingPath that we pass along other's
         // delegate rather than other itself.

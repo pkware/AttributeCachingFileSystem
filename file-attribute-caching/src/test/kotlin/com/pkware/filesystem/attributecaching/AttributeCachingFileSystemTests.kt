@@ -1,5 +1,6 @@
 package com.pkware.filesystem.attributecaching
 
+import com.google.common.jimfs.Jimfs
 import com.google.common.truth.ComparableSubject
 import com.google.common.truth.Truth.assertThat
 import org.apache.commons.io.IOUtils
@@ -84,7 +85,22 @@ class AttributeCachingFileSystemTests {
     }
 
     @Test
-    fun `create java io tmpdir file with default filesystem wrapped by file attribute caching filesystem`() {
+    fun `create java io tmpdir directory with jimfs does not throw a ProviderMismatchException`() {
+        val filesystem = AttributeCachingFileSystem.wrapping(Jimfs.newFileSystem())
+        assertDoesNotThrow {
+            val javaTmpPath = filesystem.getPath(System.getProperty("java.io.tmpdir"))
+
+            if (!Files.exists(javaTmpPath)) {
+                Files.createDirectories(javaTmpPath)
+            }
+            assertThat(Files.exists(javaTmpPath)).isTrue()
+            Files.deleteIfExists(javaTmpPath)
+        }
+        filesystem.close()
+    }
+
+    @Test
+    fun `create java io tmpdir file with default filesystem does not throw a NullPointerException`() {
         AttributeCachingFileSystem.wrapping(FileSystems.getDefault()).use {
             assertDoesNotThrow {
                 val javaTmpPath = it.getPath(System.getProperty("java.io.tmpdir"))
