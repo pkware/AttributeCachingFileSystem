@@ -31,9 +31,42 @@ import java.nio.file.attribute.UserPrincipal
 import java.text.SimpleDateFormat
 import java.util.EnumSet
 import java.util.stream.Stream
+import kotlin.concurrent.thread
 import kotlin.io.path.exists
 
 class AttributeCachingFileSystemTests {
+
+    @Test
+    fun `attribute caching filesystem invoked many times across multiple threads does not throw`() {
+        val defaultFileSystem = FileSystems.getDefault()
+        val waitTimeMillis: Long = 50_000
+        var caughtException: Exception? = null
+
+        fun runTestThread(): Thread {
+            return thread {
+                for (i in 1..100_000) {
+                    try {
+                        AttributeCachingFileSystem.wrapping(defaultFileSystem).use { }
+                    } catch (e: Exception) {
+                        // Need to catch and record the exception here because junit does not fail the test if an
+                        // assertion fails inside a thread.
+                        caughtException = e
+                    }
+                }
+            }
+        }
+
+        val firstThread = runTestThread()
+        val secondThread = runTestThread()
+        val thirdThread = runTestThread()
+
+        // Join threads out of order to try to catch concurrences, timeout after waitTimeMillis in cases of deadlock
+        firstThread.join(waitTimeMillis)
+        thirdThread.join(waitTimeMillis)
+        secondThread.join(waitTimeMillis)
+
+        assertThat(caughtException).isNull()
+    }
 
     @ParameterizedTest
     @MethodSource("allFileSystems")
