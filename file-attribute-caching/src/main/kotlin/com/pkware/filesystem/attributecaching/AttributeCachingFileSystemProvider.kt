@@ -47,11 +47,25 @@ internal class AttributeCachingFileSystemProvider : FileSystemProvider() {
         System.getProperty("os.name").lowercase(Locale.ENGLISH).contains("win")
     }
 
+    /**
+     * Helper function to prevent concurrent creation and addition of new [FileSystem]s for this provider
+     *
+     * Only one thread is allowed at a time to create and add a new [FileSystem] to this provider's
+     * [fileSystems] map.
+     *
+     * @param uri The [URI] identifying the file system.
+     * @param env A map of provider specific properties to configure the file system.
+     * @return A [FileSystem] instance matching the given [uri] configured with the given [env].
+     */
+    @Synchronized
+    private fun newFileSystemSynchronized(uri: URI, env: MutableMap<String, *>): FileSystem =
+        fileSystems.computeIfAbsent(uri) {
+            AttributeCachingFileSystem(env.getValue("filesystem") as FileSystem, this)
+        }
+
     override fun getScheme(): String = "cache"
 
-    override fun newFileSystem(uri: URI, env: MutableMap<String, *>): FileSystem = fileSystems.computeIfAbsent(uri) {
-        AttributeCachingFileSystem(env.getValue("filesystem") as FileSystem, this)
-    }
+    override fun newFileSystem(uri: URI, env: MutableMap<String, *>): FileSystem = newFileSystemSynchronized(uri, env)
 
     override fun getFileSystem(uri: URI): FileSystem =
         fileSystems[uri] ?: throw FileSystemNotFoundException("Filesystem for $uri not found.")
