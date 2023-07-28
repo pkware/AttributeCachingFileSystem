@@ -6,10 +6,32 @@ import java.nio.file.FileSystem
 import java.nio.file.LinkOption
 import java.nio.file.NoSuchFileException
 import java.nio.file.Path
+import java.nio.file.attribute.AclFileAttributeView
+import java.nio.file.attribute.BasicFileAttributeView
 import java.nio.file.attribute.BasicFileAttributes
+import java.nio.file.attribute.DosFileAttributeView
 import java.nio.file.attribute.DosFileAttributes
+import java.nio.file.attribute.FileAttributeView
+import java.nio.file.attribute.PosixFileAttributeView
 import java.nio.file.attribute.PosixFileAttributes
 import java.nio.file.spi.FileSystemProvider
+
+/**
+ * Cache key for basic file attributes.
+ */
+public const val CACHE_KEY_BASIC: String = "*"
+/**
+ * Cache key for dos file attributes.
+ */
+public const val CACHE_KEY_DOS: String = "dos:*"
+/**
+ * Cache key for posix file attributes.
+ */
+public const val CACHE_KEY_POSIX: String = "posix:*"
+/**
+ * Cache key for the acl file attribute view.
+ */
+public const val CACHE_KEY_ACL: String = "acl:*"
 
 /**
  * A [Path] instance that supports caching of [BasicFileAttributes] and other classes that extend it such as
@@ -31,20 +53,42 @@ internal class AttributeCachingPath(
      */
     private var isInitialized = false
 
+    private val delegateSupportedFileAttributeViews = delegate.fileSystem.supportedFileAttributeViews()
+
     private var basicAttributes by LazyAttribute {
         delegate.fileSystem.provider().readAttributes(delegate, BasicFileAttributes::class.java)
     }
 
     private var dosAttributes by LazyAttribute {
-        val provider = delegate.fileSystem.provider()
-        val views = delegate.fileSystem.supportedFileAttributeViews()
-        if (views.contains("dos")) provider.readAttributes(delegate, DosFileAttributes::class.java) else null
+        if (delegateSupportedFileAttributeViews.contains("dos")) {
+            delegate.fileSystem.provider().readAttributes(delegate, DosFileAttributes::class.java)
+        } else {
+            null
+        }
     }
 
     private var posixAttributes by LazyAttribute {
-        val provider = delegate.fileSystem.provider()
-        val views = delegate.fileSystem.supportedFileAttributeViews()
-        if (views.contains("posix")) provider.readAttributes(delegate, PosixFileAttributes::class.java) else null
+        if (delegateSupportedFileAttributeViews.contains("posix")) {
+            delegate.fileSystem.provider().readAttributes(delegate, PosixFileAttributes::class.java)
+        } else {
+            null
+        }
+    }
+
+    private var accessControlListOwner by LazyAttribute {
+        if (delegateSupportedFileAttributeViews.contains("acl")) {
+            delegate.fileSystem.provider().getFileAttributeView(delegate, AclFileAttributeView::class.java).owner
+        } else {
+            null
+        }
+    }
+
+    private var accessControlListEntries by LazyAttribute {
+        if (delegateSupportedFileAttributeViews.contains("acl")) {
+            delegate.fileSystem.provider().getFileAttributeView(delegate, AclFileAttributeView::class.java).acl
+        } else {
+            null
+        }
     }
 
     init {
@@ -54,6 +98,8 @@ internal class AttributeCachingPath(
                 basicAttributes
                 dosAttributes
                 posixAttributes
+                accessControlListOwner
+                accessControlListEntries
                 isInitialized = true
             } catch (expected: NoSuchFileException) {
                 // Swallow NoSuchFileExceptions and skip cache checks on files that do not exist or are not regular
@@ -93,6 +139,7 @@ internal class AttributeCachingPath(
     override fun resolve(other: Path): Path {
         // Make sure if other is a AttributeCachingPath that we pass along other's
         // delegate rather than other itself.
+
         val resolvedDelegatePath = if (other is AttributeCachingPath) {
             delegate.resolve(other.delegate)
         } else {
@@ -101,6 +148,10 @@ internal class AttributeCachingPath(
 
         return AttributeCachingPath(fileSystem, resolvedDelegatePath)
     }
+
+    // With other being a string, it can never be an AttributeCachingPath, so it would not have a delegate. However,
+    // we should still make an AttributeCachingPath out of the resulting resolved path.
+    override fun resolve(other: String): Path = AttributeCachingPath(fileSystem, delegate.resolve(other))
 
     override fun getName(index: Int): Path {
         val nameDelegate = delegate.getName(index)
@@ -133,6 +184,10 @@ internal class AttributeCachingPath(
         return AttributeCachingPath(fileSystem, resolvedSiblingDelegatePath)
     }
 
+    // With other being a string, it can never be an AttributeCachingPath, so it would not have a delegate. However,
+    // we should still make an AttributeCachingPath out of the resulting resolved sibling path.
+    override fun resolveSibling(other: String): Path = AttributeCachingPath(fileSystem, delegate.resolveSibling(other))
+
     override fun relativize(other: Path): Path {
         // Make sure if other is a AttributeCachingPath that we pass along other's
         // delegate rather than other itself.
@@ -162,22 +217,37 @@ internal class AttributeCachingPath(
     override fun toString(): String = delegate.toString()
 
     /**
-     * Sets the entry for the given attribute [name] with the given [value]. Can only set entire
-     * attribute `Class`es such as "dos:*", "posix:*", and "basic:*"
+     * Sets the entry for the given attribute [name] with the given [value]. Can only set entire attribute `Class`es
+     * such as "acl:*", "dos:*", "posix:*", and "basic:*" For most attribute `Class`es the actual attributes are cached,
+     * but in the case of [AclFileAttributeView] the entire view is cached.
      *
      * The attribute name must include a "*" in order to be set within the cache.
      *
      * @param name The name of the attribute to cache.
-     * @param value The attribute value to cache.
+     * @param value The [FileAttributeView] to cache from.
      */
-    fun <A : BasicFileAttributes> setAttributeByName(name: String, value: A?) {
+    fun <A : FileAttributeView> setAttributeByName(name: String, value: A?) {
         // This check is to ensure that we are only storing attribute classes and not specific attributes.
         // Remove basic: from our attribute name if present as basicFileAttributes can be accessed without that
         // qualifier
         when (name.substringAfter("basic:")) {
-            "*" -> basicAttributes = value
-            "dos:*" -> posixAttributes = value as? PosixFileAttributes
-            "posix:*" -> dosAttributes = value as? DosFileAttributes
+            CACHE_KEY_BASIC -> {
+                val basicFileAttributeView = value as? BasicFileAttributeView
+                basicAttributes = basicFileAttributeView?.readAttributes()
+            }
+            CACHE_KEY_DOS -> {
+                val dosFileAttributeView = value as? DosFileAttributeView
+                dosAttributes = dosFileAttributeView?.readAttributes()
+            }
+            CACHE_KEY_POSIX -> {
+                val posixFileAttributeView = value as? PosixFileAttributeView
+                posixAttributes = posixFileAttributeView?.readAttributes()
+            }
+            CACHE_KEY_ACL -> {
+                val aclFileAttributeView = value as? AclFileAttributeView
+                accessControlListOwner = aclFileAttributeView?.owner
+                accessControlListEntries = aclFileAttributeView?.acl
+            }
         }
     }
 
@@ -193,23 +263,12 @@ internal class AttributeCachingPath(
     @Throws(IOException::class, UnsupportedOperationException::class)
     fun copyCachedAttributesTo(target: AttributeCachingPath) {
         try {
-            val delegateFileSystem = delegate.fileSystem
-            val supportedViews = delegateFileSystem.supportedFileAttributeViews()
-
-            val basicFileAttributes = getAllAttributesMatchingClass(BasicFileAttributes::class.java)
-
-            val dosFileAttributes = if (supportedViews.contains("dos")) {
-                getAllAttributesMatchingClass(DosFileAttributes::class.java)
-            } else null
-
-            val posixFileAttributes = if (supportedViews.contains("posix")) {
-                getAllAttributesMatchingClass(PosixFileAttributes::class.java)
-            } else null
-
             // Can set null values here but that's okay.
-            target.basicAttributes = basicFileAttributes
-            target.dosAttributes = dosFileAttributes
-            target.posixAttributes = posixFileAttributes
+            target.basicAttributes = basicAttributes
+            target.dosAttributes = dosAttributes
+            target.posixAttributes = posixAttributes
+            target.accessControlListOwner = accessControlListOwner
+            target.accessControlListEntries = accessControlListEntries
             target.isInitialized = isInitialized
         } catch (expected: NoSuchFileException) {
             // Swallow NoSuchFileExceptions and skip cache checks on files that do not exist or are not regular files.
@@ -256,44 +315,56 @@ internal class AttributeCachingPath(
         // remove basic: from our attribute name if present as basicFileAttributes can be accessed without that qualifier
         var checkedNames = names.substringAfter("basic:")
 
-        // get our attribute class from the cache, should be BasicFileAttributes, DosFileAttributes, or PosixFileAttributes
-        val attributeClass = if (checkedNames.startsWith("dos")) {
-            dosAttributes
-        } else if (checkedNames.startsWith("posix")) {
-            posixAttributes
+        if (checkedNames.startsWith("acl")) {
+            // get our acl attributes and translate them to MutableMap<String, Any>?
+            // Acl file attributes do not extend BasicFileAttributes and are their own separate entity.
+            try {
+                attributeMap["owner"] = requireNotNull(accessControlListOwner)
+                attributeMap["acl"] = requireNotNull(accessControlListEntries)
+            } catch (expected: IllegalArgumentException) {
+                return null
+            }
         } else {
-            basicAttributes
-        }
+            // get our attribute class from the cache, should be BasicFileAttributes, DosFileAttributes, or
+            // PosixFileAttributes.
+            val attributeClass = if (checkedNames.startsWith("dos")) {
+                dosAttributes
+            } else if (checkedNames.startsWith("posix")) {
+                posixAttributes
+            } else {
+                basicAttributes
+            }
 
-        if (attributeClass == null) return null
+            if (attributeClass == null) return null
 
-        // translate our class object to MutableMap<String, Any>?
+            // translate our class object to MutableMap<String, Any>?
 
-        // get basic filesystem attributes
-        // these should always exist because DosFileAttributes and PosixFileAttributes extend BasicFileAttributes
-        attributeMap["lastModifiedTime"] = attributeClass.lastModifiedTime()
-        attributeMap["lastAccessTime"] = attributeClass.lastAccessTime()
-        attributeMap["creationTime"] = attributeClass.creationTime()
-        attributeMap["regularFile"] = attributeClass.isRegularFile
-        attributeMap["directory"] = attributeClass.isDirectory
-        attributeMap["symbolicLink"] = attributeClass.isSymbolicLink
-        attributeMap["other"] = attributeClass.isOther
-        attributeMap["size"] = attributeClass.size()
-        // Don't add the fileKey to our map if it's null, it throws an NPE
-        if (attributeClass.fileKey() != null) {
-            attributeMap["fileKey"] = attributeClass.fileKey()
-        }
+            // get basic filesystem attributes
+            // these should always exist because DosFileAttributes and PosixFileAttributes extend BasicFileAttributes
+            attributeMap["lastModifiedTime"] = attributeClass.lastModifiedTime()
+            attributeMap["lastAccessTime"] = attributeClass.lastAccessTime()
+            attributeMap["creationTime"] = attributeClass.creationTime()
+            attributeMap["regularFile"] = attributeClass.isRegularFile
+            attributeMap["directory"] = attributeClass.isDirectory
+            attributeMap["symbolicLink"] = attributeClass.isSymbolicLink
+            attributeMap["other"] = attributeClass.isOther
+            attributeMap["size"] = attributeClass.size()
+            // Don't add the fileKey to our map if it's null, it throws an NPE
+            if (attributeClass.fileKey() != null) {
+                attributeMap["fileKey"] = attributeClass.fileKey()
+            }
 
-        // AttributeClass may or may not be either of the following BasicFileAttributes subclasses
-        if (attributeClass is DosFileAttributes) {
-            attributeMap["readonly"] = attributeClass.isReadOnly
-            attributeMap["hidden"] = attributeClass.isHidden
-            attributeMap["archive"] = attributeClass.isArchive
-            attributeMap["system"] = attributeClass.isSystem
-        } else if (attributeClass is PosixFileAttributes) {
-            attributeMap["owner"] = attributeClass.owner()
-            attributeMap["group"] = attributeClass.group()
-            attributeMap["permissions"] = attributeClass.permissions()
+            // AttributeClass may or may not be either of the following BasicFileAttributes subclasses
+            if (attributeClass is DosFileAttributes) {
+                attributeMap["readonly"] = attributeClass.isReadOnly
+                attributeMap["hidden"] = attributeClass.isHidden
+                attributeMap["archive"] = attributeClass.isArchive
+                attributeMap["system"] = attributeClass.isSystem
+            } else if (attributeClass is PosixFileAttributes) {
+                attributeMap["owner"] = attributeClass.owner()
+                attributeMap["group"] = attributeClass.group()
+                attributeMap["permissions"] = attributeClass.permissions()
+            }
         }
 
         // Filter out attributes if the checkedName does not contain the "*" wildcard
@@ -302,6 +373,8 @@ internal class AttributeCachingPath(
             checkedNames = checkedNames.substringAfter("dos:")
             // remove posix: for later attribute name only filtering
             checkedNames = checkedNames.substringAfter("posix:")
+            // remove acl: for later attribute name only filtering
+            checkedNames = checkedNames.substringAfter("acl:")
 
             // If we contain a "," then we have multiple attributes
             attributeMap = if (checkedNames.contains(",")) {

@@ -19,6 +19,7 @@ import java.nio.file.OpenOption
 import java.nio.file.Path
 import java.nio.file.Paths
 import java.nio.file.StandardCopyOption
+import java.nio.file.attribute.AclFileAttributeView
 import java.nio.file.attribute.BasicFileAttributeView
 import java.nio.file.attribute.BasicFileAttributes
 import java.nio.file.attribute.DosFileAttributeView
@@ -28,7 +29,6 @@ import java.nio.file.attribute.FileAttributeView
 import java.nio.file.attribute.PosixFileAttributeView
 import java.nio.file.attribute.PosixFileAttributes
 import java.nio.file.spi.FileSystemProvider
-import java.util.Locale
 import java.util.concurrent.ExecutorService
 
 /**
@@ -44,7 +44,8 @@ internal class AttributeCachingFileSystemProvider : FileSystemProvider() {
     private val fileSystems = mutableMapOf<URI, FileSystem>()
     private val isWindowsOS by lazy {
         // Adapted from org/junit/jupiter/api/condition/OS.java to look up the operating system name
-        System.getProperty("os.name").lowercase(Locale.ENGLISH).contains("win")
+        // lowercase() defaults to Locale.ROOT in kotlin, but toLowerCase() in java does not, BE AWARE OF THIS.
+        System.getProperty("os.name").lowercase().contains("win")
     }
 
     /**
@@ -363,48 +364,43 @@ internal class AttributeCachingFileSystemProvider : FileSystemProvider() {
             return
         }
 
-        // Then set our cache
-        // Need to make sure that we only supply class names to path.setAttributeByName
-        // cannot set single attribute in the cache
-        val attributeClassName: String = if (attribute.startsWith("dos")) {
-            "dos:*"
-        } else if (attribute.startsWith("posix")) {
-            "posix:*"
-        } else {
-            "*"
-        }
-
-        // Even if we have a single attribute only we should get the entire attribute class for that single
-        // attribute to properly set the cache.
-        val attributesObject = getAttributesClassFromPathProvider(path, attributeClassName)
-        path.setAttributeByName(attributeClassName, attributesObject)
-    }
-
-    /**
-     * Obtain the attribute `Class` for a given [path] and [attributes] String.
-     *
-     * @param path The [AttributeCachingPath] to obtain the attribute `Class` from.
-     * @param attributes The attributes used to look up the attribute `Class`. Can be single attributes or an entire
-     * attribute `Class` String (ie: "dos:*","basic:*","posix:permissions", etc.).
-     * @return The attribute `Class` for the [path] from the given [attributes] or `null` if the `Class` does not exist.
-     * @throws IOException if an error occurs while trying to obtain the attribute `Class`.
-     */
-    @Throws(IOException::class)
-    private fun getAttributesClassFromPathProvider(
-        path: AttributeCachingPath,
-        attributes: String
-    ): BasicFileAttributes? {
         val delegatePath = path.delegate
         val delegateProvider = delegatePath.fileSystem.provider()
 
-        val attributeView: BasicFileAttributeView? = if (attributes.startsWith("dos")) {
-            delegateProvider.getFileAttributeView(delegatePath, DosFileAttributeView::class.java)
-        } else if (attributes.startsWith("posix")) {
-            delegateProvider.getFileAttributeView(delegatePath, PosixFileAttributeView::class.java)
-        } else {
-            delegateProvider.getFileAttributeView(delegatePath, BasicFileAttributeView::class.java)
+        // Then set our cache
+        // Need to make sure that we only supply class names to path.setAttributeByName
+        // cannot set single attribute in the cache
+        val attributeCacheKey = when {
+            attribute.startsWith("dos") -> CACHE_KEY_DOS
+            attribute.startsWith("posix") -> CACHE_KEY_POSIX
+            attribute.startsWith("acl") -> CACHE_KEY_ACL
+            else -> CACHE_KEY_BASIC
         }
-        return attributeView?.readAttributes()
+
+        // Even if we have a single attribute only we should get the entire attribute view class for that single
+        // attribute to properly set the cache.
+        val fileAttributeView: FileAttributeView? = delegateProvider.getFileAttributeView(
+            delegatePath,
+            getAttributeViewJavaClassType(attributeCacheKey)
+        )
+        path.setAttributeByName(attributeCacheKey, fileAttributeView)
+    }
+
+    /**
+     * Gets the specific [FileAttributeView]::class.java type instance from the given [key] or `null` if the key
+     * doesn't match [CACHE_KEY_BASIC], [CACHE_KEY_DOS], [CACHE_KEY_POSIX], or [CACHE_KEY_ACL].
+     *
+     * @param key The string key to look up.
+     * @return The specific [FileAttributeView]::class.java type instance or `null` if the key doesn't match any known
+     * value.
+     */
+    @Suppress("UNCHECKED_CAST")
+    private fun <V : FileAttributeView> getAttributeViewJavaClassType(key: String): Class<V>? = when (key) {
+        CACHE_KEY_BASIC -> BasicFileAttributeView::class.java as Class<V>
+        CACHE_KEY_DOS -> DosFileAttributeView::class.java as Class<V>
+        CACHE_KEY_POSIX -> PosixFileAttributeView::class.java as Class<V>
+        CACHE_KEY_ACL -> AclFileAttributeView::class.java as Class<V>
+        else -> null
     }
 
     /**
