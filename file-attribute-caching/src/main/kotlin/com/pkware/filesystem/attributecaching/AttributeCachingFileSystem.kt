@@ -66,7 +66,7 @@ public class AttributeCachingFileSystem(
         ): AttributeCachingFileSystem = FileSystems.newFileSystem(
             // Need to ensure a unique fileSystem name everytime this is called, hence UUID.randomUUID()
             URI.create("cache:///${UUID.randomUUID()}"),
-            mapOf(Pair("filesystem", fileSystem))
+            mapOf(Pair("filesystem", fileSystem)),
         ) as AttributeCachingFileSystem
     }
 }

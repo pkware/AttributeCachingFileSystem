@@ -1,8 +1,8 @@
 [versions]
 junitVersion = "5.8.2"
 detektVersion = "1.20.0"
-ktlintVersion = "10.2.1"
 log4jVersion = "2.18.0"
+ktlintVersion = "11.5.0"
 
 [libraries]
 commons-io = "commons-io:commons-io:2.11.0"

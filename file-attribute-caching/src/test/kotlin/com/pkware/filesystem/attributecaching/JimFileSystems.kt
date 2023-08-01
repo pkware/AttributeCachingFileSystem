@@ -8,19 +8,19 @@ fun linuxJimfs(): FileSystem = Jimfs.newFileSystem(
     Configuration.unix()
         .toBuilder()
         .setAttributeViews("basic", "owner", "posix", "unix", "user")
-        .build()
+        .build(),
 )
 
 fun osXJimfs(): FileSystem = Jimfs.newFileSystem(
     Configuration.osX()
         .toBuilder()
         .setAttributeViews("basic", "owner", "posix", "unix", "user")
-        .build()
+        .build(),
 )
 
 fun windowsJimfs(): FileSystem = Jimfs.newFileSystem(
     Configuration.windows()
         .toBuilder()
         .setAttributeViews("basic", "owner", "dos", "acl", "user")
-        .build()
+        .build(),
 )

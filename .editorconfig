@@ -10,6 +10,8 @@ tab_width = 4
 
 # ktlint
 ij_kotlin_imports_layout = *,java.**,javax.**,kotlin.**,^
+ij_kotlin_allow_trailing_comma = true
+ij_kotlin_allow_trailing_comma_on_call_site = true
 
 [*.{yml,yaml}]
 indent_size = 2

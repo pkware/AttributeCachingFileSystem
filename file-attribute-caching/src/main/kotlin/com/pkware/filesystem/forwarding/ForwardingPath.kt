@@ -47,7 +47,7 @@ public abstract class ForwardingPath(private val delegate: Path) : Path {
     override fun register(
         watcher: WatchService,
         events: Array<out WatchEvent.Kind<*>>,
-        vararg modifiers: WatchEvent.Modifier?
+        vararg modifiers: WatchEvent.Modifier?,
     ): WatchKey = delegate.register(watcher, events, *modifiers)
 
     override fun relativize(other: Path): Path = delegate.relativize(other)
