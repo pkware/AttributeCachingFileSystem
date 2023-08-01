@@ -32,7 +32,7 @@ public abstract class ForwardingFileSystemProvider(private val delegate: FileSys
     override fun <V : FileAttributeView?> getFileAttributeView(
         path: Path,
         type: Class<V>,
-        vararg options: LinkOption
+        vararg options: LinkOption,
     ): V = delegate.getFileAttributeView(path, type, *options)
 
     override fun isSameFile(path: Path, path2: Path): Boolean = delegate.isSameFile(path, path2)
@@ -49,7 +49,7 @@ public abstract class ForwardingFileSystemProvider(private val delegate: FileSys
     override fun newByteChannel(
         path: Path,
         options: MutableSet<out OpenOption>,
-        vararg attrs: FileAttribute<*>
+        vararg attrs: FileAttribute<*>,
     ): SeekableByteChannel = delegate.newByteChannel(path, options, *attrs)
 
     override fun delete(path: Path) {
@@ -59,7 +59,7 @@ public abstract class ForwardingFileSystemProvider(private val delegate: FileSys
     override fun <A : BasicFileAttributes?> readAttributes(
         path: Path,
         type: Class<A>,
-        vararg options: LinkOption
+        vararg options: LinkOption,
     ): A = delegate.readAttributes(path, type, *options)
 
     override fun readAttributes(path: Path, attributes: String, vararg options: LinkOption): MutableMap<String, Any> =

@@ -20,14 +20,17 @@ import java.nio.file.spi.FileSystemProvider
  * Cache key for basic file attributes.
  */
 public const val CACHE_KEY_BASIC: String = "*"
+
 /**
  * Cache key for dos file attributes.
  */
 public const val CACHE_KEY_DOS: String = "dos:*"
+
 /**
  * Cache key for posix file attributes.
  */
 public const val CACHE_KEY_POSIX: String = "posix:*"
+
 /**
  * Cache key for the acl file attribute view.
  */

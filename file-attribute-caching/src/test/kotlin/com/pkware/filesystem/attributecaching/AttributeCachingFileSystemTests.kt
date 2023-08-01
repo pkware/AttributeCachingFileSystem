@@ -85,7 +85,6 @@ class AttributeCachingFileSystemTests {
         Files.createFile(testPath)
 
         AttributeCachingFileSystem.wrapping(fileSystem).use {
-
             assertThat(testPath).isNotInstanceOf(AttributeCachingPath::class.java)
 
             // get filesystem attribute caching path
@@ -110,7 +109,6 @@ class AttributeCachingFileSystemTests {
         Files.createFile(testPath)
 
         AttributeCachingFileSystem.wrapping(fileSystem).use {
-
             assertThat(testPath).isNotInstanceOf(AttributeCachingPath::class.java)
 
             // get and verify filesystem attribute caching path
@@ -205,7 +203,7 @@ class AttributeCachingFileSystemTests {
             Files.createDirectory(tempParentDirPath)
             Files.createDirectory(tempDirPath)
             val cachingPath = it.getPath(
-                "temp${it.separator}.${it.separator}.${it.separator}test${it.separator}test.txt"
+                "temp${it.separator}.${it.separator}.${it.separator}test${it.separator}test.txt",
             )
             Files.createFile(cachingPath)
             Files.newOutputStream(cachingPath).use { outputStream ->
@@ -331,7 +329,7 @@ class AttributeCachingFileSystemTests {
     @MethodSource("allTypes")
     fun <A : BasicFileAttributes?> `read attributes by class type from provider`(
         type: Class<A>,
-        fileSystem: () -> FileSystem
+        fileSystem: () -> FileSystem,
     ) = AttributeCachingFileSystem.wrapping(fileSystem()).use {
         // get filesystem attribute caching path
         val cachingPath = it.getPath("testfile.txt")
@@ -362,7 +360,7 @@ class AttributeCachingFileSystemTests {
         attributeName: String,
         expectedMapSize: Int,
         attributeViewName: String,
-        fileSystem: () -> FileSystem
+        fileSystem: () -> FileSystem,
     ) = AttributeCachingFileSystem.wrapping(fileSystem()).use {
         // get filesystem attribute caching path
         val cachingPath = it.getPath("testfile.txt")
@@ -431,9 +429,9 @@ class AttributeCachingFileSystemTests {
             assertThat(groupUserPrincipal?.name).isEqualTo(group?.name)
             @Suppress("UNCHECKED_CAST")
             assertThat(
-                PosixFilePermissions.toString(attributesMap["permissions"] as? MutableSet<PosixFilePermission>)
+                PosixFilePermissions.toString(attributesMap["permissions"] as? MutableSet<PosixFilePermission>),
             ).isEqualTo(
-                PosixFilePermissions.toString(permissions)
+                PosixFilePermissions.toString(permissions),
             )
         } finally {
             Files.deleteIfExists(cachingPath)
@@ -508,9 +506,7 @@ class AttributeCachingFileSystemTests {
     fun `cached acl attributes do not get modified by concurrent operation`() {
         val defaultFileSystem = FileSystems.getDefault()
         val uniqueID = UUID.randomUUID()
-        val tempDirPath = defaultFileSystem.getPath(
-            System.getProperty("java.io.tmpdir")
-        ) / "TEST-ACL-$uniqueID"
+        val tempDirPath = defaultFileSystem.getPath(System.getProperty("java.io.tmpdir")) / "TEST-ACL-$uniqueID"
 
         AttributeCachingFileSystem.wrapping(defaultFileSystem).use {
             // get filesystem attribute caching path
@@ -541,7 +537,7 @@ class AttributeCachingFileSystemTests {
 
                 // simulate concurrent modification on default filesystem
                 val concurrentPath = defaultFileSystem.getPath(
-                    "$tempDirPath${defaultFileSystem.separator}testfile-$uniqueID.txt"
+                    "$tempDirPath${defaultFileSystem.separator}testfile-$uniqueID.txt",
                 )
 
                 val acl = AclEntry.newBuilder()
@@ -569,7 +565,7 @@ class AttributeCachingFileSystemTests {
                 assertThat(originalOwner).isEqualTo(newAttributesMap["owner"])
                 @Suppress("UNCHECKED_CAST")
                 assertThat(originalAclEntries).containsExactlyElementsIn(
-                    newAttributesMap["acl"] as? List<AclEntry>
+                    newAttributesMap["acl"] as? List<AclEntry>,
                 ).inOrder()
             } finally {
                 Files.deleteIfExists(cachingPath)
@@ -583,7 +579,6 @@ class AttributeCachingFileSystemTests {
     @ValueSource(strings = ["dos:readonly", "dos:hidden", "dos:archive", "dos:system"])
     fun `set and read dos boolean attributes for path`(attributeName: String) =
         AttributeCachingFileSystem.wrapping(FileSystems.getDefault()).use {
-
             // get filesystem attribute caching path
             val javaTmpDir = it.getPath(System.getProperty("java.io.tmpdir"))
             assertThat(javaTmpDir).isInstanceOf(AttributeCachingPath::class.java)
@@ -619,12 +614,11 @@ class AttributeCachingFileSystemTests {
     @ParameterizedTest
     @MethodSource("allFileSystems")
     fun `cached attributes do not get modified by concurrent operation`(
-        fileSystem: FileSystem
+        fileSystem: FileSystem,
     ) {
         val tempDirPath = fileSystem.getPath("temp")
 
         AttributeCachingFileSystem.wrapping(fileSystem).use {
-
             // get filesystem attribute caching path
             Files.createDirectory(tempDirPath)
             val cachingPath = it.getPath("$tempDirPath${it.separator}testfile.txt")
@@ -634,10 +628,10 @@ class AttributeCachingFileSystemTests {
             }
 
             val lastAccessTime = FileTime.from(
-                SimpleDateFormat("MM/dd/yyyy, hh:mm:ss a").parse("01/01/1971, 08:34:27 PM").toInstant()
+                SimpleDateFormat("MM/dd/yyyy, hh:mm:ss a").parse("01/01/1971, 08:34:27 PM").toInstant(),
             )
             val creationTime = FileTime.from(
-                SimpleDateFormat("MM/dd/yyyy, hh:mm:ss a").parse("01/01/1969, 06:34:27 PM").toInstant()
+                SimpleDateFormat("MM/dd/yyyy, hh:mm:ss a").parse("01/01/1969, 06:34:27 PM").toInstant(),
             )
 
             // set and populate cache attributes, 3 different times
@@ -647,10 +641,10 @@ class AttributeCachingFileSystemTests {
 
             // simulate concurrent modification on default filesystem
             val concurrentPath = fileSystem.getPath(
-                "$tempDirPath${fileSystem.separator}testfile.txt"
+                "$tempDirPath${fileSystem.separator}testfile.txt",
             )
             val concurrentTime = FileTime.from(
-                SimpleDateFormat("MM/dd/yyyy, hh:mm:ss a").parse("01/01/2001, 01:11:11 PM").toInstant()
+                SimpleDateFormat("MM/dd/yyyy, hh:mm:ss a").parse("01/01/2001, 01:11:11 PM").toInstant(),
             )
             // should set the attributes directly without setting the cache, set all to same time
             Files.setAttribute(concurrentPath, "lastModifiedTime", concurrentTime)
@@ -670,7 +664,7 @@ class AttributeCachingFileSystemTests {
     @MethodSource("allFileSystemsWithCopyOption")
     fun `copy file from source to target`(
         option: CopyOption,
-        fileSystem: () -> FileSystem
+        fileSystem: () -> FileSystem,
     ) = AttributeCachingFileSystem.wrapping(fileSystem()).use {
         // get filesystem attribute caching path
         val cachingPath = it.getPath("testfile.txt")
@@ -709,7 +703,7 @@ class AttributeCachingFileSystemTests {
     @MethodSource("allFileSystemsWithMoveOption")
     fun `move file from source to target`(
         option: CopyOption,
-        fileSystem: () -> FileSystem
+        fileSystem: () -> FileSystem,
     ) = AttributeCachingFileSystem.wrapping(fileSystem()).use {
         // get filesystem attribute caching path
         val cachingPath = it.getPath("testfile.txt")
@@ -768,7 +762,7 @@ class AttributeCachingFileSystemTests {
     fun `file isHidden on unix and macOS`(
         fileName: String,
         expectedHidden: Boolean,
-        fileSystem: () -> FileSystem
+        fileSystem: () -> FileSystem,
     ) = AttributeCachingFileSystem.wrapping(fileSystem()).use {
         val directoryName = "temp"
         Files.createDirectory(it.getPath(directoryName))
@@ -869,7 +863,7 @@ class AttributeCachingFileSystemTests {
 
         private fun ComparableSubject<FileTime>.followedFlagRulesComparedTo(
             options: CopyOption,
-            expected: FileTime
+            expected: FileTime,
         ) = if (options == StandardCopyOption.COPY_ATTRIBUTES) isEqualTo(expected) else isNotEqualTo(expected)
     }
 }
@@ -878,5 +872,5 @@ class AttributeCachingFileSystemTests {
  * A [FileTime] representing the date "01/01/1970, 07:34:27 PM".
  */
 private val testDateFileTime: FileTime = FileTime.from(
-    SimpleDateFormat("MM/dd/yyyy, hh:mm:ss a").parse("01/01/1970, 07:34:27 PM").toInstant()
+    SimpleDateFormat("MM/dd/yyyy, hh:mm:ss a").parse("01/01/1970, 07:34:27 PM").toInstant(),
 )

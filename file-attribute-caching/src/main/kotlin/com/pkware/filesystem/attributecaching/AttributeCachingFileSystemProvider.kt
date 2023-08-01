@@ -76,7 +76,7 @@ internal class AttributeCachingFileSystemProvider : FileSystemProvider() {
     override fun newByteChannel(
         path: Path,
         options: MutableSet<out OpenOption>,
-        vararg attrs: FileAttribute<*>?
+        vararg attrs: FileAttribute<*>?,
     ): SeekableByteChannel = Files.newByteChannel(path.getUnderlyingPath(), options, *attrs)
 
     override fun newDirectoryStream(dir: Path, filter: DirectoryStream.Filter<in Path>): DirectoryStream<Path> =
@@ -169,7 +169,8 @@ internal class AttributeCachingFileSystemProvider : FileSystemProvider() {
     }
 
     override fun isSameFile(path: Path, path2: Path) = Files.isSameFile(
-        path.getUnderlyingPath(), path2.getUnderlyingPath()
+        path.getUnderlyingPath(),
+        path2.getUnderlyingPath(),
     )
 
     /**
@@ -192,7 +193,7 @@ internal class AttributeCachingFileSystemProvider : FileSystemProvider() {
     override fun isHidden(path: Path): Boolean = if (path is AttributeCachingPath) {
         if (isWindowsOS) {
             val attributesMap = path.getAllAttributesMatchingNames("dos:*") ?: throw IOException(
-                "Could not get dos attributes of $path from delegate filesystem."
+                "Could not get dos attributes of $path from delegate filesystem.",
             )
             val isHidden = attributesMap["hidden"] as Boolean && !(attributesMap["directory"] as Boolean)
             isHidden
@@ -207,14 +208,12 @@ internal class AttributeCachingFileSystemProvider : FileSystemProvider() {
 
     @Throws(IOException::class)
     override fun getFileStore(path: Path): FileStore {
-
         val actualPath = path.getUnderlyingPath()
         return actualPath.fileSystem.provider().getFileStore(actualPath)
     }
 
     @Throws(IOException::class)
     override fun checkAccess(path: Path, vararg modes: AccessMode?) {
-
         val actualPath = path.getUnderlyingPath()
         return actualPath.fileSystem.provider().checkAccess(actualPath, *modes)
     }
@@ -222,7 +221,7 @@ internal class AttributeCachingFileSystemProvider : FileSystemProvider() {
     override fun <V : FileAttributeView?> getFileAttributeView(
         path: Path,
         type: Class<V>?,
-        vararg options: LinkOption?
+        vararg options: LinkOption?,
     ): V {
         val actualPath = path.getUnderlyingPath()
         return actualPath.fileSystem.provider().getFileAttributeView(actualPath, type, *options)
@@ -232,7 +231,7 @@ internal class AttributeCachingFileSystemProvider : FileSystemProvider() {
         IllegalArgumentException::class,
         UnsupportedOperationException::class,
         FileAlreadyExistsException::class,
-        IOException::class
+        IOException::class,
     )
     override fun newFileChannel(path: Path, options: Set<OpenOption?>, vararg attrs: FileAttribute<*>?): FileChannel {
         val actualPath = path.getUnderlyingPath()
@@ -243,13 +242,13 @@ internal class AttributeCachingFileSystemProvider : FileSystemProvider() {
         IllegalArgumentException::class,
         UnsupportedOperationException::class,
         FileAlreadyExistsException::class,
-        IOException::class
+        IOException::class,
     )
     override fun newAsynchronousFileChannel(
         path: Path,
         options: Set<OpenOption?>,
         executor: ExecutorService,
-        vararg attrs: FileAttribute<*>?
+        vararg attrs: FileAttribute<*>?,
     ): AsynchronousFileChannel {
         val actualPath = path.getUnderlyingPath()
         return actualPath.fileSystem.provider().newAsynchronousFileChannel(actualPath, options, executor, *attrs)
@@ -258,7 +257,7 @@ internal class AttributeCachingFileSystemProvider : FileSystemProvider() {
     @Throws(
         UnsupportedOperationException::class,
         FileAlreadyExistsException::class,
-        IOException::class
+        IOException::class,
     )
     override fun createSymbolicLink(link: Path, target: Path, vararg attrs: FileAttribute<*>?) {
         val actualLinkPath = if (link is AttributeCachingPath) link.delegate else link
@@ -296,10 +295,10 @@ internal class AttributeCachingFileSystemProvider : FileSystemProvider() {
     override fun <A : BasicFileAttributes?> readAttributes(
         path: Path,
         type: Class<A>,
-        vararg options: LinkOption
+        vararg options: LinkOption,
     ): A = if (path is AttributeCachingPath) {
         val attributes = path.getAllAttributesMatchingClass(type) ?: throw UnsupportedOperationException(
-            "Could not read attributes of type $type from the path $path and its delegate filesystem."
+            "Could not read attributes of type $type from the path $path and its delegate filesystem.",
         )
         attributes
     } else {
@@ -328,10 +327,10 @@ internal class AttributeCachingFileSystemProvider : FileSystemProvider() {
     override fun readAttributes(
         path: Path,
         attributes: String,
-        vararg options: LinkOption
+        vararg options: LinkOption,
     ): MutableMap<String, Any> = if (path is AttributeCachingPath) {
         val attributesMap = path.getAllAttributesMatchingNames(attributes) ?: throw IllegalArgumentException(
-            "Could not read attributes $attributes of the path $path from the delegate filesystem."
+            "Could not read attributes $attributes of the path $path from the delegate filesystem.",
         )
         attributesMap
     } else {
@@ -354,7 +353,6 @@ internal class AttributeCachingFileSystemProvider : FileSystemProvider() {
      */
     @Throws(IOException::class, UnsupportedOperationException::class, IllegalArgumentException::class)
     override fun setAttribute(path: Path, attribute: String, value: Any?, vararg options: LinkOption) {
-
         val actualPath = path.getUnderlyingPath()
         val provider = actualPath.fileSystem.provider()
         // Always set attribute(s) first with real filesystem IO
@@ -381,7 +379,7 @@ internal class AttributeCachingFileSystemProvider : FileSystemProvider() {
         // attribute to properly set the cache.
         val fileAttributeView: FileAttributeView? = delegateProvider.getFileAttributeView(
             delegatePath,
-            getAttributeViewJavaClassType(attributeCacheKey)
+            getAttributeViewJavaClassType(attributeCacheKey),
         )
         path.setAttributeByName(attributeCacheKey, fileAttributeView)
     }
