@@ -50,16 +50,15 @@ class AttributeCachingFileSystemTests {
         val waitTimeMillis: Long = 50_000
         var caughtException: Exception? = null
 
-        fun runTestThread(): Thread {
-            return thread {
-                for (i in 1..100_000) {
-                    try {
-                        AttributeCachingFileSystem.wrapping(defaultFileSystem).use { }
-                    } catch (e: Exception) {
-                        // Need to catch and record the exception here because junit does not fail the test if an
-                        // assertion fails inside a thread.
-                        caughtException = e
-                    }
+        fun runTestThread(): Thread = thread {
+            @Suppress("UnusedPrivateProperty")
+            for (i in 1..100_000) {
+                try {
+                    AttributeCachingFileSystem.wrapping(defaultFileSystem).use { }
+                } catch (e: Exception) {
+                    // Need to catch and record the exception here because junit does not fail the test if an
+                    // assertion fails inside a thread.
+                    caughtException = e
                 }
             }
         }

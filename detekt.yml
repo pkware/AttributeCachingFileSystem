@@ -4,6 +4,14 @@ config:
   validation: true
   warningsAsErrors: true
 
+import:
+  EnforceStaticImport:
+    active: true
+    methods:
+      - 'com.google.common.truth.Truth.assertThat'
+      - 'org.junit.jupiter.params.provider.Arguments.arguments'
+      - 'org.apache.logging.log4j.spi.AbstractLogger.CATCHING_MARKER'
+
 comments:
   active: true
   EndOfSentenceFormat:
@@ -18,11 +26,11 @@ comments:
     searchInInnerObject: true
     searchInInnerInterface: true
   UndocumentedPublicFunction:
-    excludes: ['**/test/**']
     active: true
+    excludes: ['**/test/**']
   UndocumentedPublicProperty:
-    excludes: ['**/test/**']
     active: true
+    excludes: ['**/test/**']
 
 complexity:
   active: false
@@ -38,14 +46,14 @@ exceptions:
   TooGenericExceptionCaught:
     active: true
     exceptionNames:
-     - ArrayIndexOutOfBoundsException
-     - Error
-     - Exception
-     - IllegalMonitorStateException
-     - NullPointerException
-     - IndexOutOfBoundsException
-     - RuntimeException
-     - Throwable
+      - ArrayIndexOutOfBoundsException
+      - Error
+      - Exception
+      - IllegalMonitorStateException
+      - NullPointerException
+      - IndexOutOfBoundsException
+      - RuntimeException
+      - Throwable
     allowedExceptionNameRegex: '_|(ignore|expected|cause).*'
 
 # The naming rules exclude test classes by default. Since we want naming rules to apply
@@ -76,25 +84,33 @@ potential-bugs:
     active: true
   DontDowncastCollectionTypes:
     active: true
-  ExitOutsideMain:
+  DoubleMutabilityForCollection:
     active: true
-  HasPlatformType:
+    # Test directories might want to reassign variables for result collections
+    excludes: [ '**/test/**' ]
+  ElseCaseInsteadOfExhaustiveWhen:
+    active: true
+  ExitOutsideMain:
     active: true
   IgnoredReturnValue:
     active: true
-    restrictToAnnotatedMethods: true
+    restrictToConfig: true
     returnValueAnnotations: ['*.CheckReturnValue', '*.CheckResult']
   MapGetWithNotNullAssertionOperator:
     active: true
+    # test directories will want to throw NPE's with maps
+    excludes: [ '**/test/**' ]
   NullableToStringCall:
+    active: true
+    ignoreFunction:
+      - 'toString()'
+  NullCheckOnMutableProperty:
+    active: true
+  PropertyUsedBeforeDeclaration:
     active: true
   UnconditionalJumpStatementInLoop:
     active: true
-  UnreachableCatchBlock:
-    active: true
-  UnusedUnaryOperator:
-    active: true
-  UselessPostfixExpression:
+  UnnecessaryNotNullCheck:
     active: true
 
 style:
@@ -105,6 +121,11 @@ style:
     active: true
   DataClassShouldBeImmutable:
     active: true
+  DestructuringDeclarationWithTooManyEntries:
+    active: true
+    maxDestructuringEntries: 4
+  DoubleNegativeLambda:
+    active: true
   EqualsOnSignatureLine:
     active: true
   ExplicitCollectionElementAccessMethod:
@@ -112,7 +133,8 @@ style:
   ExpressionBodySyntax:
     active: true
     includeLineWrapping: true
-    excludes: ['**/test/**']
+  ForbiddenAnnotation:
+    active: true
   ForbiddenImport:
     active: true
     imports:
@@ -122,32 +144,49 @@ style:
       - 'org.junit.BeforeClass'
       - 'org.junit.After'
       - 'org.junit.AfterClass'
-    forbiddenPatterns: 'junit.framework.*'
+      - 'org.junit.jupiter.api.Assertions'
+    forbiddenPatterns: '(?:junit\.framework|org\.junit\.jupiter\.api\.Assertions)\.(?!assertThrows).+'
   ForbiddenComment:
-    active: true
-    values: ['FIXME', 'STOPSHIP']
+    comments:
+      - reason: 'Forbidden FIXME todo marker in comment, please fix the problem.'
+        value: 'FIXME'
+      - reason: 'Forbidden STOPSHIP todo marker in comment, please address the problem before shipping the code.'
+        value: 'STOPSHIP'
+      - reason: 'Authors are not recorded in KDoc.'
+        value: '@author'
   ForbiddenMethodCall:
     active: true
-    excludes: ['**/test/**']
+    excludes: [ '**/test/**' ]
     methods:
       - 'kotlin.io.println'
       - 'kotlin.io.print'
-  ForbiddenPublicDataClass:
-    active: true
-    excludes: ['**']
-    ignorePackages: ['*.internal', '*.internal.*']
+      - 'java.nio.file.Path.toFile'
+      - 'org.apache.logging.log4j.Logger.trace'
+      - 'org.apache.logging.log4j.Logger.debug'
+      - 'org.apache.logging.log4j.Logger.info'
+      - 'org.apache.logging.log4j.Logger.warn'
+      - 'org.apache.logging.log4j.Logger.error'
+      - 'org.apache.logging.log4j.Logger.fatal'
+      - 'org.apache.logging.log4j.Logger.log'
+      - 'org.apache.logging.log4j.Logger.printf'
+      - 'org.apache.logging.log4j.Logger.isTraceEnabled'
+      - 'org.apache.logging.log4j.Logger.isDebugEnabled'
+      - 'org.apache.logging.log4j.Logger.isInfoEnabled'
+      - 'org.apache.logging.log4j.Logger.isWarnEnabled'
+      - 'org.apache.logging.log4j.Logger.isErrorEnabled'
+      - 'org.apache.logging.log4j.Logger.isFatalEnabled'
+      - 'org.apache.logging.log4j.Logger.isEnabled'
   ForbiddenVoid:
     active: true
     ignoreOverridden: false
     ignoreUsageInGenerics: false
-  LibraryCodeMustSpecifyReturnType:
-    # Enforced by the compiler
-    active: false
-  LibraryEntitiesShouldNotBePublic:
-    # Enforced by the compiler
-    active: false
-  MandatoryBracesIfStatements:
+  LoopWithTooManyJumpStatements:
+    maxJumpCount: 3
+  BracesOnIfStatements:
     active: true
+  BracesOnWhenStatements:
+    active: true
+    multiLine: 'necessary'
   MandatoryBracesLoops:
     active: true
   MaxLineLength:
@@ -156,14 +195,11 @@ style:
   NewLineAtEndOfFile:
     # Specified by editorconfig & enforced by ktlint
     active: false
-  OptionalWhenBraces:
+  NullableBooleanCheck:
     active: true
   RedundantExplicitType:
     active: true
-  RedundantHigherOrderMapUsage:
-    active: true
   RedundantVisibilityModifierRule:
-    # activate to true once https://github.com/detekt/detekt/issues/3874 is resolved
     active: false
   ReturnCount:
     active: false
@@ -172,20 +208,14 @@ style:
   UnderscoresInNumericLiterals:
     active: true
     acceptableLength: 5
-  UnnecessaryFilter:
+  UnnecessaryBackticks:
     active: true
+  # Disabled because it produces false positive when using JUnit's @Nested classes
+  UnnecessaryInnerClass:
+    active: false
   UnnecessaryLet:
     active: true
   UntilInsteadOfRangeTo:
-    active: true
-  UnusedPrivateMember:
-    active: true
-    excludes: ['**/test/**']
-  UseArrayLiteralsInAnnotations:
-    active: true
-  UseCheckNotNull:
-    active: true
-  UseCheckOrError:
     active: true
   UseEmptyCounterpart:
     active: true
@@ -193,13 +223,14 @@ style:
     active: true
   UseIfInsteadOfWhen:
     active: true
-  UseIsNullOrEmpty:
-    active: true
-  UseOrEmpty:
-    active: true
-  UseRequire:
+    ignoreWhenContainingVariableDeclaration: true
+  UseLet:
     active: true
   UseRequireNotNull:
+    active: true
+  UseSumOfInsteadOfFlatMapSize:
+    active: true
+  UnnecessaryBracesAroundTrailingLambda:
     active: true
   WildcardImport:
     # Specified by editorconfig and enforced by ktlint
@@ -207,3 +238,7 @@ style:
   MagicNumber:
     # We usually catch these in code review, and more often than not, the constants aren't very magical
     active: false
+
+performance:
+  UnnecessaryPartOfBinaryExpression:
+    active: true
