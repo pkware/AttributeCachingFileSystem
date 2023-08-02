@@ -4,8 +4,8 @@
 
 ## [1.0.2]
 - Gradle, Kotlin, and other dependency versions updated.
-- Add caching of AclFileAttributeView owner and aclEntries as properties to AttributeCachingPath.
-- Modify AttributeCachingFileSystemProvider functions to support AclFileAttributeView.
+- Add caching of AclFileAttributeView owner and aclEntries attributes as properties of AttributeCachingPath.
+- Modified AttributeCachingFileSystemProvider setAttribute() to support AclFileAttributeView.
 - Add function overrides to AttributeCachingPath for resolve() and resolveSibling() when called with strings.
 - Fixed issues with multithreaded calling of AttributeCachingFileSystemProvider newFileSystem().
 
