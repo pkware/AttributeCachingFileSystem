@@ -530,6 +530,83 @@ class AttributeCachingFileSystemTests {
                 // Test with original file owner on default filesystem because it's a large amount of work to create our
                 // own test user there.
 
+                val originalAttributeMap = Files.readAttributes(cachingPath, "acl:*")
+                val originalOwner = originalAttributeMap["owner"] as? UserPrincipal
+
+                @Suppress("UNCHECKED_CAST")
+                val originalAclEntries = originalAttributeMap["acl"] as? List<AclEntry>
+
+                // simulate concurrent modification on default filesystem
+                val concurrentPath = defaultFileSystem.getPath(
+                    "$tempDirPath${defaultFileSystem.separator}testfile-$uniqueID.txt",
+                )
+
+                val acl = AclEntry.newBuilder()
+                    .setType(AclEntryType.ALLOW)
+                    .setPrincipal(originalOwner)
+                    .setFlags(AclEntryFlag.FILE_INHERIT)
+                    .setPermissions(
+                        AclEntryPermission.WRITE_NAMED_ATTRS,
+                        AclEntryPermission.WRITE_ATTRIBUTES,
+                        AclEntryPermission.WRITE_DATA,
+                        AclEntryPermission.READ_ACL,
+                        AclEntryPermission.APPEND_DATA,
+                        AclEntryPermission.READ_ATTRIBUTES,
+                        AclEntryPermission.READ_DATA,
+                        AclEntryPermission.READ_NAMED_ATTRS,
+                        AclEntryPermission.DELETE,
+                    )
+                    .build()
+                Files.setAttribute(concurrentPath, "acl:acl", listOf<AclEntry>(acl))
+
+                val newAttributesMap = Files.readAttributes(cachingPath, "acl:*")
+
+                assertThat(newAttributesMap).isInstanceOf(MutableMap::class.java)
+                assertThat(originalOwner).isEqualTo(newAttributesMap["owner"] as? UserPrincipal)
+                @Suppress("UNCHECKED_CAST")
+                assertThat(originalAclEntries).containsExactlyElementsIn(
+                    newAttributesMap["acl"] as? List<AclEntry>,
+                ).inOrder()
+            } finally {
+                Files.deleteIfExists(cachingPath)
+                Files.deleteIfExists(testDir)
+            }
+        }
+    }
+
+    // This test demonstrates that we cannot cache attributes via the AclFileAttributeView itself and by extension we
+    // cannot cache attributes via any other view directly (BasicFileAttributeView, DosFileAttributeView,
+    // PosixFileAttributeView) because accessing those views' properties performs filesystem/disk io.
+    @Test
+    @EnabledOnOs(OS.WINDOWS)
+    fun `acl attributes accessed from Files getFileAttributeView() are not cached`() {
+        val defaultFileSystem = FileSystems.getDefault()
+        val uniqueID = UUID.randomUUID()
+        val tempDirPath = defaultFileSystem.getPath(System.getProperty("java.io.tmpdir")) / "TEST-ACL-$uniqueID"
+
+        AttributeCachingFileSystem.wrapping(defaultFileSystem).use {
+            // get filesystem attribute caching path
+            val javaTmpDir = it.getPath(System.getProperty("java.io.tmpdir"))
+            val testDir = javaTmpDir / "TEST-ACL-$uniqueID"
+            Files.createDirectories(testDir)
+            var cachingPath = testDir / "testfile-$uniqueID.txt"
+
+            Files.createFile(cachingPath)
+            Files.newOutputStream(cachingPath).use { outputStream ->
+                outputStream.write("hello".toByteArray(Charsets.UTF_8))
+            }
+
+            assertThat(cachingPath).isInstanceOf(AttributeCachingPath::class.java)
+            assertThat((cachingPath as AttributeCachingPath).isCachedInitialized()).isFalse()
+            // Force cachingPath initialization after the file is created with getPath on the path's string representation.
+            // This test requires that the cache of the file under test be initialized.
+            cachingPath = it.getPath(cachingPath.toString())
+            assertThat((cachingPath as AttributeCachingPath).isCachedInitialized()).isTrue()
+
+            try {
+                // Test with original file owner on default filesystem because it's a large amount of work to create our
+                // own test user there.
+
                 val originalAttributeView = Files.getFileAttributeView(cachingPath, AclFileAttributeView::class.java)
                 val originalOwner = originalAttributeView.owner
                 val originalAclEntries = originalAttributeView.acl
@@ -555,17 +632,17 @@ class AttributeCachingFileSystemTests {
                         AclEntryPermission.DELETE,
                     )
                     .build()
-                val aclEntries = listOf<AclEntry>(acl)
-                Files.setAttribute(concurrentPath, "acl:acl", aclEntries)
+                Files.setAttribute(concurrentPath, "acl:acl", listOf<AclEntry>(acl))
 
-                val newAttributesMap = Files.readAttributes(cachingPath, "acl:*")
+                val newAttributeView = Files.getFileAttributeView(cachingPath, AclFileAttributeView::class.java)
+                val newOwner = newAttributeView.owner
+                val newAclEntries = newAttributeView.acl
 
-                assertThat(newAttributesMap).isInstanceOf(MutableMap::class.java)
-                assertThat(originalOwner).isEqualTo(newAttributesMap["owner"])
-                @Suppress("UNCHECKED_CAST")
-                assertThat(originalAclEntries).containsExactlyElementsIn(
-                    newAttributesMap["acl"] as? List<AclEntry>,
-                ).inOrder()
+                assertThat(newAttributeView).isInstanceOf(AclFileAttributeView::class.java)
+                // owner doesn't change because we didn't modify the owner in the concurrent file path
+                assertThat(originalOwner).isEqualTo(newOwner)
+                // acl entries do change because we modified the acl entries in the concurrent file path
+                assertThat(originalAclEntries).doesNotContain(newAclEntries)
             } finally {
                 Files.deleteIfExists(cachingPath)
                 Files.deleteIfExists(testDir)
