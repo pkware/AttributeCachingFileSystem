@@ -7,6 +7,10 @@ attributes.
 It reduces `OTHER_IOPS` calls as listed in the "other" column when executing [Procmon] and looking at
 operations performed on a given file where file attributes are read and/or set.
 
+**NOTE**: This filesystem does not support caching attributes from `FileAttributeView`(s) directly (ie: via
+setting and/or getting attributes from views returned from `Files.getFileAttributeView()`). Please use
+`Files.readAttributes()` and `Files.setAttribute()` to access proper attribute caching functionality.
+
 ## Installation and Usage Instructions
 For installation with gradle:
 * Dependency to add to the top level `build.gradle.kts` file:
