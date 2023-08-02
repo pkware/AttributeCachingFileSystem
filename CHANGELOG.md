@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+## [1.0.2]
+- Gradle, Kotlin, and other dependency versions updated.
+- Add caching of AclFileAttributeView owner and aclEntries as properties to AttributeCachingPath.
+- Modify AttributeCachingFileSystemProvider functions to support AclFileAttributeView.
+- Add function overrides to AttributeCachingPath for resolve() and resolveSibling() when called with strings.
+- Fixed issues with multithreaded calling of AttributeCachingFileSystemProvider newFileSystem().
+
 ## [1.0.1]
 Fixed issues with AttributeCachingPath not being used to wrap parent, root, and filename paths.
 
@@ -9,5 +16,6 @@ Fixed issues with AttributeCachingPath not being used to wrap parent, root, and 
 Initial work for the file attribute caching filesystem using cached attribute fields that do not expire.
 
 [Unreleased]: https://github.com/pkware/attributeCachingFileSystem/tree/main
+[1.0.2]: https://github.com/pkware/attributeCachingFileSystem/tree/1.0.2
 [1.0.1]: https://github.com/pkware/attributeCachingFileSystem/tree/1.0.1
 [1.0.0]: https://github.com/pkware/attributeCachingFileSystem/tree/1.0.0
