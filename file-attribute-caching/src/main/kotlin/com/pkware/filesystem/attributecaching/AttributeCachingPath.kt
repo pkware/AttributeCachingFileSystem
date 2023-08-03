@@ -45,7 +45,7 @@ public const val CACHE_KEY_ACL: String = "acl:*"
  * @param initializeCache `true` to initialize the cached attribute fields of this [AttributeCachingPath] instance.
  * The default is `false`.
  */
-internal class AttributeCachingPath(
+public class AttributeCachingPath(
     private val fileSystem: FileSystem,
     internal val delegate: Path,
     private val initializeCache: Boolean = false,
@@ -117,7 +117,7 @@ internal class AttributeCachingPath(
      *
      * @return `true` if the cache fields have been initialized, `false` otherwise.
      */
-    fun isCachedInitialized(): Boolean = isInitialized
+    public fun isCachedInitialized(): Boolean = isInitialized
 
     override fun getFileSystem(): FileSystem = fileSystem
 
@@ -229,7 +229,7 @@ internal class AttributeCachingPath(
      * @param name The name of the attribute to cache.
      * @param value The [FileAttributeView] to cache from.
      */
-    fun <A : FileAttributeView> setAttributeByName(name: String, value: A?) {
+    public fun <A : FileAttributeView> setAttributeByName(name: String, value: A?) {
         // This check is to ensure that we are only storing attribute classes and not specific attributes.
         // Remove basic: from our attribute name if present as basicFileAttributes can be accessed without that
         // qualifier
@@ -264,7 +264,7 @@ internal class AttributeCachingPath(
      * [AttributeCachingPath]'s attributes to copy.
      */
     @Throws(IOException::class, UnsupportedOperationException::class)
-    fun copyCachedAttributesTo(target: AttributeCachingPath) {
+    public fun copyCachedAttributesTo(target: AttributeCachingPath) {
         try {
             // Can set null values here but that's okay.
             target.basicAttributes = basicAttributes
@@ -292,7 +292,7 @@ internal class AttributeCachingPath(
      */
     @Suppress("UNCHECKED_CAST")
     @Throws(IOException::class, UnsupportedOperationException::class)
-    fun <A : BasicFileAttributes?> getAllAttributesMatchingClass(type: Class<A>): A? = when (type) {
+    public fun <A : BasicFileAttributes?> getAllAttributesMatchingClass(type: Class<A>): A? = when (type) {
         BasicFileAttributes::class.java -> basicAttributes as A
         DosFileAttributes::class.java -> dosAttributes as A
         PosixFileAttributes::class.java -> posixAttributes as A
@@ -313,7 +313,7 @@ internal class AttributeCachingPath(
      * @throws UnsupportedOperationException If the attributes of the given [names] are not supported.
      */
     @Throws(IOException::class, UnsupportedOperationException::class)
-    fun getAllAttributesMatchingNames(names: String): MutableMap<String, Any>? {
+    public fun getAllAttributesMatchingNames(names: String): MutableMap<String, Any>? {
         var attributeMap = mutableMapOf<String, Any>()
         // remove basic: from our attribute name if present as basicFileAttributes can be accessed without that qualifier
         var checkedNames = names.substringAfter("basic:")
