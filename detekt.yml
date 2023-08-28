@@ -144,8 +144,7 @@ style:
       - 'org.junit.BeforeClass'
       - 'org.junit.After'
       - 'org.junit.AfterClass'
-      - 'org.junit.jupiter.api.Assertions'
-    forbiddenPatterns: '(?:junit\.framework|org\.junit\.jupiter\.api\.Assertions)\.(?!assertThrows).+'
+    forbiddenPatterns: '(?:junit\.framework|org\.junit\.jupiter\.api\.Assertions)\.assertThrows.+'
   ForbiddenComment:
     comments:
       - reason: 'Forbidden FIXME todo marker in comment, please fix the problem.'
