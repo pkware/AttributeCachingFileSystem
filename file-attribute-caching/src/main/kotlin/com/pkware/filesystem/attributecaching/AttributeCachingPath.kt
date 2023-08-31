@@ -54,35 +54,25 @@ internal class AttributeCachingPath(
     private val delegateSupportedFileAttributeViews = delegate.fileSystem.supportedFileAttributeViews()
 
     /**
-     * Shows whether [BasicFileAttributes] are cached. `true` for cached, default is
-     * `false`.
+     * On demand [LazyAttribute] field for [BasicFileAttributes].
      */
-    var basicAttributesCached = false
-        private set
-
-    private var basicAttributes by LazyAttribute {
+    val cachedBasicAttributes = LazyAttribute {
         val basicFileAttributes = delegate.fileSystem.provider().readAttributes(
             delegate,
             BasicFileAttributes::class.java,
         )
-        basicAttributesCached = true
         basicFileAttributes
     }
 
     /**
-     * Shows whether [DosFileAttributes] are cached. `true` for cached, default is
-     * `false`.
+     * On demand [LazyAttribute] field for [DosFileAttributes].
      */
-    var dosAttributesCached = false
-        private set
-
-    private var dosAttributes by LazyAttribute {
+    val cachedDosAttributes = LazyAttribute {
         if (delegateSupportedFileAttributeViews.contains("dos")) {
             val dosFileAttributes = delegate.fileSystem.provider().readAttributes(
                 delegate,
                 DosFileAttributes::class.java,
             )
-            dosAttributesCached = true
             dosFileAttributes
         } else {
             null
@@ -90,19 +80,14 @@ internal class AttributeCachingPath(
     }
 
     /**
-     * Shows whether [PosixFileAttributes] are cached. `true` for cached, default is
-     * `false`.
+     * On demand [LazyAttribute] field for [PosixFileAttributes].
      */
-    var posixAttributesCached = false
-        private set
-
-    private var posixAttributes by LazyAttribute {
+    val cachedPosixAttributes = LazyAttribute {
         if (delegateSupportedFileAttributeViews.contains("posix")) {
             val posixFileAttributes = delegate.fileSystem.provider().readAttributes(
                 delegate,
                 PosixFileAttributes::class.java,
             )
-            posixAttributesCached = true
             posixFileAttributes
         } else {
             null
@@ -110,19 +95,14 @@ internal class AttributeCachingPath(
     }
 
     /**
-     * Shows whether the ACL (access control list) [UserPrincipal] owner is cached. `true` for cached, default is
-     * `false`.
+     * On demand [LazyAttribute] field for the ACL (access control list) [UserPrincipal] owner.
      */
-    var accessControlListOwnerCached = false
-        private set
-
-    private var accessControlListOwner by LazyAttribute {
+    val cachedAccessControlListOwner = LazyAttribute {
         if (delegateSupportedFileAttributeViews.contains("acl")) {
             val owner = delegate.fileSystem.provider().getFileAttributeView(
                 delegate,
                 AclFileAttributeView::class.java,
             ).owner
-            accessControlListOwnerCached = true
             owner
         } else {
             null
@@ -130,19 +110,14 @@ internal class AttributeCachingPath(
     }
 
     /**
-     * Shows whether the ACL (access control list) [AclEntry] are cached. `true` for cached, default is
-     * `false`.
+     * On demand [LazyAttribute] field for the ACL (access control list) [AclEntry]s.
      */
-    var accessControlListEntriesCached = false
-        private set
-
-    private var accessControlListEntries by LazyAttribute {
+    val cachedAccessControlListEntries = LazyAttribute {
         if (delegateSupportedFileAttributeViews.contains("acl")) {
             val acl = delegate.fileSystem.provider().getFileAttributeView(
                 delegate,
                 AclFileAttributeView::class.java,
             ).acl
-            accessControlListEntriesCached = true
             acl
         } else {
             null
@@ -188,7 +163,7 @@ internal class AttributeCachingPath(
 
     override fun getName(index: Int): Path {
         val nameDelegate = delegate.getName(index)
-        // Dont need to copy cache here because root cannot be returned, only element closest to root is returned.
+        // Don't need to copy cache here because root cannot be returned, only element closest to root is returned.
         return AttributeCachingPath(fileSystem, nameDelegate)
     }
 
@@ -266,25 +241,20 @@ internal class AttributeCachingPath(
         when (name.substringAfter("basic:")) {
             CACHE_KEY_BASIC -> {
                 val basicFileAttributeView = value as? BasicFileAttributeView
-                basicAttributes = basicFileAttributeView?.readAttributes()
-                basicAttributesCached = basicAttributes != null
+                cachedBasicAttributes.value = basicFileAttributeView?.readAttributes()
             }
             CACHE_KEY_DOS -> {
                 val dosFileAttributeView = value as? DosFileAttributeView
-                dosAttributes = dosFileAttributeView?.readAttributes()
-                dosAttributesCached = dosAttributes != null
+                cachedDosAttributes.value = dosFileAttributeView?.readAttributes()
             }
             CACHE_KEY_POSIX -> {
                 val posixFileAttributeView = value as? PosixFileAttributeView
-                posixAttributes = posixFileAttributeView?.readAttributes()
-                posixAttributesCached = posixAttributes != null
+                cachedPosixAttributes.value = posixFileAttributeView?.readAttributes()
             }
             CACHE_KEY_ACL -> {
                 val aclFileAttributeView = value as? AclFileAttributeView
-                accessControlListOwner = aclFileAttributeView?.owner
-                accessControlListOwnerCached = accessControlListOwner != null
-                accessControlListEntries = aclFileAttributeView?.acl
-                accessControlListEntriesCached = accessControlListEntries != null
+                cachedAccessControlListOwner.value = aclFileAttributeView?.owner
+                cachedAccessControlListEntries.value = aclFileAttributeView?.acl
             }
         }
     }
@@ -293,39 +263,26 @@ internal class AttributeCachingPath(
      * Copies this [AttributeCachingPath]s values to the [target].
      *
      * @param target The [AttributeCachingPath] to copy cached attributes to.
-     * @param forceCopyAttributes 'true' to indicate attributes should be copied from this [AttributeCachingPath]
-     * regardless if they are `null` or not. Accessing a `null` attribute will force a lookup and incur an OTHER_IOPS
-     * penalty. Default is `false` - only copy attributes if they have been previously cached.
+     * @param forceCopyAndInitTarget 'true' to indicate attributes should be copied from this
+     * [AttributeCachingPath] regardless if they are `null` or not. Accessing a `null` attribute will force a lookup
+     * and incur an OTHER_IOPS penalty. Default is `false` - only copy attributes if they have been previously cached.
      * @throws IOException If something goes wrong with the underlying calls with obtaining this
      * [AttributeCachingPath]'s attributes to copy.
      * @throws UnsupportedOperationException If something goes wrong with the underlying calls with obtaining this
      * [AttributeCachingPath]'s attributes to copy.
      */
     @Throws(IOException::class, UnsupportedOperationException::class)
-    fun copyCachedAttributesTo(target: AttributeCachingPath, forceCopyAttributes: Boolean = false) {
+    fun copyCachedAttributesTo(target: AttributeCachingPath, forceCopyAndInitTarget: Boolean = false) {
         try {
             // Can set null values here for any attribute set but that's okay.
             // If any of [AttributeCachingPath]'s values are `null` and we try to access them, it will force a lookup
             // and incur an OTHER_IOPS penalty.
 
-            if (forceCopyAttributes || basicAttributesCached) target.basicAttributes = basicAttributes
-            target.basicAttributesCached = basicAttributesCached
-
-            if (forceCopyAttributes || dosAttributesCached) target.dosAttributes = dosAttributes
-            target.dosAttributesCached = dosAttributesCached
-
-            if (forceCopyAttributes || posixAttributesCached) target.posixAttributes = posixAttributes
-            target.posixAttributesCached = posixAttributesCached
-
-            if (forceCopyAttributes || accessControlListOwnerCached) {
-                target.accessControlListOwner = accessControlListOwner
-            }
-            target.accessControlListOwnerCached = accessControlListOwnerCached
-
-            if (forceCopyAttributes || accessControlListEntriesCached) {
-                target.accessControlListEntries = accessControlListEntries
-            }
-            target.accessControlListEntriesCached = accessControlListEntriesCached
+            target.cachedBasicAttributes.copyValue(cachedBasicAttributes, forceCopyAndInitTarget)
+            target.cachedDosAttributes.copyValue(cachedDosAttributes, forceCopyAndInitTarget)
+            target.cachedPosixAttributes.copyValue(cachedPosixAttributes, forceCopyAndInitTarget)
+            target.cachedAccessControlListOwner.copyValue(cachedAccessControlListOwner, forceCopyAndInitTarget)
+            target.cachedAccessControlListEntries.copyValue(cachedAccessControlListEntries, forceCopyAndInitTarget)
         } catch (expected: NoSuchFileException) {
             // Swallow NoSuchFileExceptions and skip cache checks on files that do not exist or are not regular files.
             // Checking these attributes directly does incur OTHER_IOPS penalties which we want to avoid.
@@ -346,9 +303,9 @@ internal class AttributeCachingPath(
     @Suppress("UNCHECKED_CAST")
     @Throws(IOException::class, UnsupportedOperationException::class)
     fun <A : BasicFileAttributes?> getAllAttributesMatchingClass(type: Class<A>): A? = when (type) {
-        BasicFileAttributes::class.java -> basicAttributes as A
-        DosFileAttributes::class.java -> dosAttributes as A
-        PosixFileAttributes::class.java -> posixAttributes as A
+        BasicFileAttributes::class.java -> cachedBasicAttributes.value as A
+        DosFileAttributes::class.java -> cachedDosAttributes.value as A
+        PosixFileAttributes::class.java -> cachedPosixAttributes.value as A
         else -> null
     }
 
@@ -375,8 +332,8 @@ internal class AttributeCachingPath(
             // get our acl attributes and translate them to MutableMap<String, Any>?
             // Acl file attributes do not extend BasicFileAttributes and are their own separate entity.
             try {
-                attributeMap["owner"] = requireNotNull(accessControlListOwner)
-                attributeMap["acl"] = requireNotNull(accessControlListEntries)
+                attributeMap["owner"] = requireNotNull(cachedAccessControlListOwner.value)
+                attributeMap["acl"] = requireNotNull(cachedAccessControlListEntries.value)
             } catch (expected: IllegalArgumentException) {
                 return null
             }
@@ -385,11 +342,11 @@ internal class AttributeCachingPath(
             // get our attribute class from the cache, should be BasicFileAttributes, DosFileAttributes, or
             // PosixFileAttributes.
             val attributeClass = if (checkedNames.startsWith("dos")) {
-                dosAttributes
+                cachedDosAttributes.value
             } else if (checkedNames.startsWith("posix")) {
-                posixAttributes
+                cachedPosixAttributes.value
             } else {
-                basicAttributes
+                cachedBasicAttributes.value
             }
             // We do not catch NoSuchFileException here and throw it up the chain instead
 
