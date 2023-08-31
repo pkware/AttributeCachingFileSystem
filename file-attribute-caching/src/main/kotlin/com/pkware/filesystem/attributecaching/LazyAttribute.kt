@@ -9,14 +9,17 @@ package com.pkware.filesystem.attributecaching
  * If the mutable attribute [value] is set to `null` its [initialized] status is set to `false`.
  *
  */
-public class LazyAttribute<T>(private val initializer: () -> T?) {
+internal class LazyAttribute<T>(private val initializer: () -> T?) {
 
     private var lazyValue: T? = null
 
     /**
-     * Shows whether this [LazyAttribute] is initialized or not. `true` for initialized, default is `false`.
+     * Shows whether the [value] is initialized or not. `true` for initialized, default is `false`.
+     *
+     * If a value is initialized that means it is not `null`, without having to check/access it directly, as performing
+     * that action can trigger the [initializer] function to be called.
      */
-    public var initialized: Boolean = false
+    var initialized: Boolean = false
         private set
 
     /**
@@ -27,7 +30,7 @@ public class LazyAttribute<T>(private val initializer: () -> T?) {
      *
      * If the mutable attribute is set to `null` its [initialized] status is set to `false`.
      */
-    internal var value: T?
+    var value: T?
         get() {
             if (initialized) return lazyValue
 
@@ -52,7 +55,7 @@ public class LazyAttribute<T>(private val initializer: () -> T?) {
      * @param forceCopyAndInitOther `true` if you want to force copying of [other] and initialize [other]'s value if it
      * is `null`. Default is `false`.
      */
-    internal fun copyValue(other: LazyAttribute<T>, forceCopyAndInitOther: Boolean = false) {
+    fun copyValue(other: LazyAttribute<T>, forceCopyAndInitOther: Boolean = false) {
         if (forceCopyAndInitOther) {
             lazyValue = other.value
         } else if (other.initialized) {

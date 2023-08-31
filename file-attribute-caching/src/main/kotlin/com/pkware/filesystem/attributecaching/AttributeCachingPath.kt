@@ -57,11 +57,7 @@ internal class AttributeCachingPath(
      * On demand [LazyAttribute] field for [BasicFileAttributes].
      */
     val cachedBasicAttributes = LazyAttribute {
-        val basicFileAttributes = delegate.fileSystem.provider().readAttributes(
-            delegate,
-            BasicFileAttributes::class.java,
-        )
-        basicFileAttributes
+        delegate.fileSystem.provider().readAttributes(delegate, BasicFileAttributes::class.java)
     }
 
     /**
@@ -69,11 +65,7 @@ internal class AttributeCachingPath(
      */
     val cachedDosAttributes = LazyAttribute {
         if (delegateSupportedFileAttributeViews.contains("dos")) {
-            val dosFileAttributes = delegate.fileSystem.provider().readAttributes(
-                delegate,
-                DosFileAttributes::class.java,
-            )
-            dosFileAttributes
+            delegate.fileSystem.provider().readAttributes(delegate, DosFileAttributes::class.java)
         } else {
             null
         }
@@ -84,11 +76,7 @@ internal class AttributeCachingPath(
      */
     val cachedPosixAttributes = LazyAttribute {
         if (delegateSupportedFileAttributeViews.contains("posix")) {
-            val posixFileAttributes = delegate.fileSystem.provider().readAttributes(
-                delegate,
-                PosixFileAttributes::class.java,
-            )
-            posixFileAttributes
+            delegate.fileSystem.provider().readAttributes(delegate, PosixFileAttributes::class.java)
         } else {
             null
         }
@@ -99,11 +87,7 @@ internal class AttributeCachingPath(
      */
     val cachedAccessControlListOwner = LazyAttribute {
         if (delegateSupportedFileAttributeViews.contains("acl")) {
-            val owner = delegate.fileSystem.provider().getFileAttributeView(
-                delegate,
-                AclFileAttributeView::class.java,
-            ).owner
-            owner
+            delegate.fileSystem.provider().getFileAttributeView(delegate, AclFileAttributeView::class.java).owner
         } else {
             null
         }
@@ -114,11 +98,7 @@ internal class AttributeCachingPath(
      */
     val cachedAccessControlListEntries = LazyAttribute {
         if (delegateSupportedFileAttributeViews.contains("acl")) {
-            val acl = delegate.fileSystem.provider().getFileAttributeView(
-                delegate,
-                AclFileAttributeView::class.java,
-            ).acl
-            acl
+            delegate.fileSystem.provider().getFileAttributeView(delegate, AclFileAttributeView::class.java).acl
         } else {
             null
         }
