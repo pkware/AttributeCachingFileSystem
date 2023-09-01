@@ -35,13 +35,13 @@ internal class LazyAttribute<T>(private val initializer: () -> T?) {
             if (initialized) return lazyValue
 
             lazyValue = initializer()
-            initialized = lazyValue != null
+            initialized = true
 
             return lazyValue
         }
         set(value) {
             lazyValue = value
-            initialized = value != null
+            initialized = true
         }
 
     /**

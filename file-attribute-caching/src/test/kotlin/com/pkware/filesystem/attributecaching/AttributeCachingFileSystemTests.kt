@@ -4,7 +4,6 @@ import com.google.common.jimfs.Jimfs
 import com.google.common.truth.ComparableSubject
 import com.google.common.truth.Truth.assertThat
 import org.apache.commons.io.IOUtils
-import org.junit.jupiter.api.Assertions.fail
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertDoesNotThrow
 import org.junit.jupiter.api.assertThrows
@@ -1015,22 +1014,10 @@ class AttributeCachingFileSystemTests {
 
             if (option == StandardCopyOption.COPY_ATTRIBUTES) {
                 assertThat(destinationCachingPath.cachedBasicAttributes.initialized).isTrue()
-
-                when (getOsString(testFileSystem)) {
-                    "windows" -> {
-                        assertThat(destinationCachingPath.cachedDosAttributes.initialized).isTrue()
-                        assertThat(destinationCachingPath.cachedPosixAttributes.initialized).isFalse()
-                        assertThat(destinationCachingPath.cachedAccessControlListOwner.initialized).isTrue()
-                        assertThat(destinationCachingPath.cachedAccessControlListEntries.initialized).isTrue()
-                    }
-                    "posix" -> {
-                        assertThat(destinationCachingPath.cachedDosAttributes.initialized).isFalse()
-                        assertThat(destinationCachingPath.cachedPosixAttributes.initialized).isTrue()
-                        assertThat(destinationCachingPath.cachedAccessControlListOwner.initialized).isFalse()
-                        assertThat(destinationCachingPath.cachedAccessControlListEntries.initialized).isFalse()
-                    }
-                    else -> fail("Unexpected Jimfs Operating System in use by this test.")
-                }
+                assertThat(destinationCachingPath.cachedDosAttributes.initialized).isTrue()
+                assertThat(destinationCachingPath.cachedPosixAttributes.initialized).isTrue()
+                assertThat(destinationCachingPath.cachedAccessControlListOwner.initialized).isTrue()
+                assertThat(destinationCachingPath.cachedAccessControlListEntries.initialized).isTrue()
             } else {
                 assertThat(destinationCachingPath.cachedBasicAttributes.initialized).isFalse()
                 assertThat(destinationCachingPath.cachedDosAttributes.initialized).isFalse()
@@ -1111,22 +1098,10 @@ class AttributeCachingFileSystemTests {
 
             if (option == StandardCopyOption.COPY_ATTRIBUTES) {
                 assertThat(destinationCachingPath.cachedBasicAttributes.initialized).isTrue()
-
-                when (getOsString(testFileSystem)) {
-                    "windows" -> {
-                        assertThat(destinationCachingPath.cachedDosAttributes.initialized).isTrue()
-                        assertThat(destinationCachingPath.cachedPosixAttributes.initialized).isFalse()
-                        assertThat(destinationCachingPath.cachedAccessControlListOwner.initialized).isTrue()
-                        assertThat(destinationCachingPath.cachedAccessControlListEntries.initialized).isTrue()
-                    }
-                    "posix" -> {
-                        assertThat(destinationCachingPath.cachedDosAttributes.initialized).isFalse()
-                        assertThat(destinationCachingPath.cachedPosixAttributes.initialized).isTrue()
-                        assertThat(destinationCachingPath.cachedAccessControlListOwner.initialized).isFalse()
-                        assertThat(destinationCachingPath.cachedAccessControlListEntries.initialized).isFalse()
-                    }
-                    else -> fail("Unexpected Jimfs Operating System in use by this test.")
-                }
+                assertThat(destinationCachingPath.cachedDosAttributes.initialized).isTrue()
+                assertThat(destinationCachingPath.cachedPosixAttributes.initialized).isTrue()
+                assertThat(destinationCachingPath.cachedAccessControlListOwner.initialized).isTrue()
+                assertThat(destinationCachingPath.cachedAccessControlListEntries.initialized).isTrue()
             } else {
                 assertThat(destinationCachingPath.cachedBasicAttributes.initialized).isFalse()
                 assertThat(destinationCachingPath.cachedDosAttributes.initialized).isFalse()
@@ -1280,16 +1255,6 @@ class AttributeCachingFileSystemTests {
             options: CopyOption,
             expected: FileTime,
         ) = if (options == StandardCopyOption.COPY_ATTRIBUTES) isEqualTo(expected) else isNotEqualTo(expected)
-
-        private fun getOsString(fileSystem: FileSystem): String {
-            val supportedViews = fileSystem.supportedFileAttributeViews()
-            return when {
-                supportedViews.contains("dos") -> "windows"
-                supportedViews.contains("posix") -> "posix"
-                supportedViews.contains("acl") -> "windows"
-                else -> "none"
-            }
-        }
     }
 }
 
