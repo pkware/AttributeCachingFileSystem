@@ -803,7 +803,7 @@ class AttributeCachingFileSystemTests {
             val javaTmpDir = it.getPath(System.getProperty("java.io.tmpdir"))
             val testDir = javaTmpDir / "TEST-ACL-$uniqueID"
             Files.createDirectories(testDir)
-            var cachingPath = testDir / "testfile-$uniqueID.txt"
+            val cachingPath = testDir / "testfile-$uniqueID.txt"
 
             Files.createFile(cachingPath)
             Files.newOutputStream(cachingPath).use { outputStream ->
