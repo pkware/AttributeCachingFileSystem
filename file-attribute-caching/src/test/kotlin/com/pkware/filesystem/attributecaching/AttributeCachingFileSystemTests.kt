@@ -203,7 +203,7 @@ class AttributeCachingFileSystemTests {
 
     @ParameterizedTest
     @MethodSource("allFileSystems")
-    fun `normalize returns a cachingPath and copies attributes copies attributes if they were previously cached`(
+    fun `normalize returns a cachingPath and copies attributes if they were previously cached`(
         fileSystem: FileSystem,
     ) = AttributeCachingFileSystem.wrapping(fileSystem).use {
         val tempParentDirPath = it.getPath("temp")
