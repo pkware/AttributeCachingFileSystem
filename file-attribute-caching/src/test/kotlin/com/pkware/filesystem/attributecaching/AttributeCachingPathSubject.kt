@@ -32,7 +32,7 @@ internal class AttributeCachingPathSubject internal constructor(
     /**
      * Asserts that the [AttributeCachingPath] has assigned all of its attributes.
      */
-    fun hasCacheFilled() = caches(
+    fun hasAssignedCache() = caches(
         CacheableAttribute.BASIC,
         CacheableAttribute.DOS,
         CacheableAttribute.ACL_OWNER,

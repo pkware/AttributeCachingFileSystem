@@ -875,7 +875,7 @@ class AttributeCachingFileSystemTests {
             assertThat(destinationCachingPath.exists()).isEqualTo(true)
 
             if (option == StandardCopyOption.COPY_ATTRIBUTES) {
-                assertThat(destinationCachingPath).hasCacheFilled()
+                assertThat(destinationCachingPath).hasAssignedCache()
             } else {
                 assertThat(destinationCachingPath).hasEmptyCache()
             }
@@ -894,7 +894,7 @@ class AttributeCachingFileSystemTests {
             assertThat(lastAccessTime).followedFlagRulesComparedTo(option, testDateFileTime)
 
             if (option == StandardCopyOption.COPY_ATTRIBUTES) {
-                assertThat(destinationCachingPath).hasCacheFilled()
+                assertThat(destinationCachingPath).hasAssignedCache()
             } else {
                 assertThat(destinationCachingPath).onlyCaches(BASIC)
             }
@@ -937,7 +937,7 @@ class AttributeCachingFileSystemTests {
             Files.move(cachingPath, destinationCachingPath, option)
 
             if (option == StandardCopyOption.COPY_ATTRIBUTES) {
-                assertThat(destinationCachingPath).hasCacheFilled()
+                assertThat(destinationCachingPath).hasAssignedCache()
             } else {
                 assertThat(destinationCachingPath).hasEmptyCache()
             }
@@ -957,7 +957,7 @@ class AttributeCachingFileSystemTests {
             assertThat(lastAccessTime).followedFlagRulesComparedTo(option, testDateFileTime)
 
             if (option == StandardCopyOption.COPY_ATTRIBUTES) {
-                assertThat(destinationCachingPath).hasCacheFilled()
+                assertThat(destinationCachingPath).hasAssignedCache()
             } else {
                 assertThat(destinationCachingPath).onlyCaches(BASIC)
             }
