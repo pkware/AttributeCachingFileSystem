@@ -111,7 +111,8 @@ internal class AttributeCachingFileSystemProvider : FileSystemProvider() {
         // Files.copy(source, target, *newOptions).
         if (options.contains(StandardCopyOption.COPY_ATTRIBUTES) &&
             source is AttributeCachingPath &&
-            target is AttributeCachingPath
+            target is AttributeCachingPath &&
+            source.delegate.fileSystem == target.delegate.fileSystem
         ) {
             // Filter out StandardCopyOption.COPY_ATTRIBUTES here because we dont want the copied filesystem to repopulate
             // the cache from the delegate provider/filesystem.
@@ -151,7 +152,8 @@ internal class AttributeCachingFileSystemProvider : FileSystemProvider() {
         // Files.move(source, target, *newOptions).
         if (options.contains(StandardCopyOption.COPY_ATTRIBUTES) &&
             source is AttributeCachingPath &&
-            target is AttributeCachingPath
+            target is AttributeCachingPath &&
+            source.delegate.fileSystem == target.delegate.fileSystem
         ) {
             // Filter out StandardCopyOption.COPY_ATTRIBUTES here because we dont want the moved filesystem to repopulate
             // the cache from the delegate provider/filesystem.
