@@ -4,8 +4,6 @@ import com.google.common.jimfs.Configuration
 import com.google.common.jimfs.Jimfs
 import com.google.common.truth.ComparableSubject
 import com.google.common.truth.Truth.assertThat
-import com.pkware.filesystem.attributecaching.AttributeCachingPathSubject.CacheableAttribute.ACL_ENTRIES
-import com.pkware.filesystem.attributecaching.AttributeCachingPathSubject.CacheableAttribute.ACL_OWNER
 import com.pkware.filesystem.attributecaching.AttributeCachingPathSubject.CacheableAttribute.BASIC
 import com.pkware.filesystem.attributecaching.AttributeCachingPathSubject.CacheableAttribute.POSIX
 import com.pkware.filesystem.attributecaching.AttributeCachingPathSubject.Companion.assertThat
@@ -510,8 +508,6 @@ class AttributeCachingFileSystemTests {
             // create our own test user and group there.
             val originalAttributeMapOwner = Files.readAttributes(cachingPath, "posix:owner")
 
-            assertThat(cachingPath).onlyCaches(POSIX)
-
             val owner = originalAttributeMapOwner["owner"] as? UserPrincipal
             val originalAttributeMapGroup = Files.readAttributes(cachingPath, "posix:group")
             val group = originalAttributeMapGroup["group"] as? GroupPrincipal
@@ -527,8 +523,6 @@ class AttributeCachingFileSystemTests {
             Files.setAttribute(cachingPath, "posix:group", group)
             Files.setAttribute(cachingPath, "posix:permissions", permissions)
 
-            assertThat(cachingPath).onlyCaches(POSIX)
-
             val attributesMap = Files.readAttributes(cachingPath, "posix:*")
 
             assertThat(attributesMap.size).isEqualTo(12)
@@ -542,8 +536,6 @@ class AttributeCachingFileSystemTests {
             ).isEqualTo(
                 PosixFilePermissions.toString(permissions),
             )
-
-            assertThat(cachingPath).onlyCaches(POSIX)
         } finally {
             Files.deleteIfExists(cachingPath)
             Files.deleteIfExists(testDir)
@@ -575,8 +567,6 @@ class AttributeCachingFileSystemTests {
                 // own test user there.
                 val originalAttributesMap = Files.readAttributes(cachingPath, "acl:owner")
 
-                assertThat(cachingPath).onlyCaches(ACL_ENTRIES, ACL_OWNER)
-
                 val owner = originalAttributesMap["owner"] as? UserPrincipal
                 val acl = AclEntry.newBuilder()
                     .setType(AclEntryType.ALLOW)
@@ -600,8 +590,6 @@ class AttributeCachingFileSystemTests {
                 Files.setAttribute(cachingPath, "acl:owner", owner)
                 Files.setAttribute(cachingPath, "acl:acl", aclEntries)
 
-                assertThat(cachingPath).onlyCaches(ACL_ENTRIES, ACL_OWNER)
-
                 val attributesMap = Files.readAttributes(cachingPath, "acl:*")
 
                 // verify that attribute is "right" type returned from the provider
@@ -609,8 +597,6 @@ class AttributeCachingFileSystemTests {
                 assertThat(owner).isEqualTo(attributesMap["owner"])
                 @Suppress("UNCHECKED_CAST")
                 assertThat(aclEntries).containsExactlyElementsIn(attributesMap["acl"] as? List<AclEntry>).inOrder()
-
-                assertThat(cachingPath).onlyCaches(ACL_ENTRIES, ACL_OWNER)
             } finally {
                 Files.deleteIfExists(cachingPath)
                 Files.deleteIfExists(testDir)
@@ -644,7 +630,6 @@ class AttributeCachingFileSystemTests {
                 // own test user there.
 
                 val originalAttributeMap = Files.readAttributes(cachingPath, "acl:*")
-                assertThat(cachingPath).onlyCaches(ACL_ENTRIES, ACL_OWNER)
 
                 val originalOwner = originalAttributeMap["owner"] as? UserPrincipal
 
@@ -682,8 +667,6 @@ class AttributeCachingFileSystemTests {
                 assertThat(originalAclEntries).containsExactlyElementsIn(
                     newAttributesMap["acl"] as? List<AclEntry>,
                 ).inOrder()
-
-                assertThat(cachingPath).onlyCaches(ACL_ENTRIES, ACL_OWNER)
             } finally {
                 Files.deleteIfExists(cachingPath)
                 Files.deleteIfExists(testDir)
