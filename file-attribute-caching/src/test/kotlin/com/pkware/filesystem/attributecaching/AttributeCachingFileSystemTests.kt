@@ -1,8 +1,11 @@
 package com.pkware.filesystem.attributecaching
 
+import com.google.common.jimfs.Configuration
 import com.google.common.jimfs.Jimfs
 import com.google.common.truth.ComparableSubject
 import com.google.common.truth.Truth.assertThat
+import com.pkware.filesystem.attributecaching.AttributeCachingPathSubject.Companion.assertThat
+import com.pkware.filesystem.attributecaching.AttributeCachingPathSubject.CacheableAttribute.POSIX
 import org.apache.commons.io.IOUtils
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertDoesNotThrow
@@ -1166,6 +1169,48 @@ class AttributeCachingFileSystemTests {
         assertThat(Files.isHidden(cachingPath)).isEqualTo(expectedHidden)
     }
 
+    @Test
+    fun `attributes are not transferred when copying across filesystems`() {
+        AttributeCachingFileSystem.wrapping(linuxJimfs()).use { linuxFilesystem ->
+
+            val tempPath = linuxFilesystem.getPath("toCopy.txt")
+            val linuxPath = linuxFilesystem.convertToCachingPath(tempPath) as AttributeCachingPath
+            Files.createFile(linuxPath)
+            val originalPermissions = setOf(PosixFilePermission.OWNER_WRITE, PosixFilePermission.OWNER_READ)
+            Files.setAttribute(linuxPath, "posix:permissions", originalPermissions)
+            assertThat(linuxPath).caches(POSIX)
+
+            AttributeCachingFileSystem.wrapping(windowsJimfs()).use { windowsFilesystem ->
+
+                val tempFile = windowsFilesystem.rootDirectories.first().resolve("temp.txt")
+                val windowsPath = windowsFilesystem.convertToCachingPath(tempFile) as AttributeCachingPath
+                Files.copy(linuxPath, windowsPath, StandardCopyOption.COPY_ATTRIBUTES)
+                assertThat(windowsPath).doesNotCache(POSIX)
+            }
+        }
+    }
+
+    @Test
+    fun `attributes are not transferred when moving across filesystems`() {
+        AttributeCachingFileSystem.wrapping(linuxJimfs()).use { linuxFilesystem ->
+
+            val tempPath = linuxFilesystem.getPath("toMove.txt")
+            val linuxPath = linuxFilesystem.convertToCachingPath(tempPath) as AttributeCachingPath
+            Files.createFile(linuxPath)
+            val originalPermissions = setOf(PosixFilePermission.OWNER_WRITE, PosixFilePermission.OWNER_READ)
+            Files.setAttribute(linuxPath, "posix:permissions", originalPermissions)
+            assertThat(linuxPath).caches(POSIX)
+
+            AttributeCachingFileSystem.wrapping(windowsJimfs()).use { windowsFileSystem ->
+
+                val tempFile = windowsFileSystem.rootDirectories.first().resolve("temp.txt")
+                val windowsPath = windowsFileSystem.convertToCachingPath(tempFile) as AttributeCachingPath
+                Files.move(linuxPath, windowsPath, StandardCopyOption.COPY_ATTRIBUTES)
+                assertThat(windowsPath).doesNotCache(POSIX)
+            }
+        }
+    }
+
     companion object {
         @JvmStatic
         fun allTypes(): Stream<Arguments> = Stream.of(
@@ -1249,6 +1294,20 @@ class AttributeCachingFileSystemTests {
             arguments(StandardCopyOption.REPLACE_EXISTING, ::osXJimfs),
             arguments(StandardCopyOption.COPY_ATTRIBUTES, ::osXJimfs),
             arguments(StandardCopyOption.ATOMIC_MOVE, ::osXJimfs),
+        )
+
+        fun linuxJimfs(): FileSystem = Jimfs.newFileSystem(
+            Configuration.unix()
+                .toBuilder()
+                .setAttributeViews("basic", "owner", "posix", "unix", "user")
+                .build(),
+        )
+
+        fun windowsJimfs(): FileSystem = Jimfs.newFileSystem(
+            Configuration.windows()
+                .toBuilder()
+                .setAttributeViews("basic", "owner", "dos", "acl", "user")
+                .build(),
         )
 
         private fun ComparableSubject<FileTime>.followedFlagRulesComparedTo(
