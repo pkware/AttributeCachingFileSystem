@@ -4,9 +4,7 @@ package com.pkware.filesystem.attributecaching
  * Stores a mutable attribute [value] that is lazily calculated via [initializer] whenever the value is `null` and
  * accessed.
  *
- * Can check the initialization status of the attribute via [initialized].
- *
- * If the mutable attribute [value] is set to `null` its [initialized] status is set to `false`.
+ * Can check the initialization/assignment status of the attribute via [assigned].
  *
  */
 internal class LazyAttribute<T>(private val initializer: () -> T?) {
@@ -14,53 +12,49 @@ internal class LazyAttribute<T>(private val initializer: () -> T?) {
     private var lazyValue: T? = null
 
     /**
-     * Shows whether the [value] is initialized or not. `true` for initialized, default is `false`.
+     * Shows whether the [value] has been assigned. `true` for initialized/assigned, default is `false`.
      *
-     * If a value is initialized that means it is not `null`, without having to check/access it directly, as performing
-     * that action can trigger the [initializer] function to be called.
+     * If a value is assigned that means it has either had its initializer called via the invocation of its getter
+     * or its setter.
      */
-    var initialized: Boolean = false
+    var assigned: Boolean = false
         private set
 
     /**
-     * The mutable attribute to store. If [initialized] is false the [initializer] function is called to set the
+     * The mutable attribute to store. If [assigned] is false the [initializer] function is called to set the
      * attribute.
-     *
-     * The attribute can be `null`.
-     *
-     * If the mutable attribute is set to `null` its [initialized] status is set to `false`.
      */
     var value: T?
         get() {
-            if (initialized) return lazyValue
+            if (assigned) return lazyValue
 
             lazyValue = initializer()
-            initialized = true
+            assigned = true
 
             return lazyValue
         }
         set(value) {
             lazyValue = value
-            initialized = true
+            assigned = true
         }
 
     /**
-     * Copies the [value] of [other] into this [LazyAttribute] instance's [value] if [other] is initialized or
-     * [forceCopyAndInitOther] is `true`.
+     * Copies the [value] of [other] into this [LazyAttribute] instance's [value] if [other] has a value assigned or
+     * [forceInitialization] is `true`.
      *
-     * If [forceCopyAndInitOther] is `true` we also force [other] to call its [initializer] function if its own [value]
-     * is `null`.
+     * If [forceInitialization] is `true` this forces [other] to call its [initializer] function if its own [value]
+     * is not [assigned].
      *
      * @param other The other [LazyAttribute] to copy.
-     * @param forceCopyAndInitOther `true` if you want to force copying of [other] and initialize [other]'s value if it
-     * is `null`. Default is `false`.
+     * @param forceInitialization Forces a copy of [other]'s value/initialization when `true`, otherwise only copies
+     * values that had already been assigned
      */
-    fun copyValue(other: LazyAttribute<T>, forceCopyAndInitOther: Boolean = false) {
-        if (forceCopyAndInitOther) {
-            lazyValue = other.value
-        } else if (other.initialized) {
-            lazyValue = other.lazyValue
+    fun copyValue(other: LazyAttribute<T>, forceInitialization: Boolean = false) {
+        lazyValue = if (forceInitialization) {
+            other.value
+        } else {
+            other.lazyValue
         }
-        initialized = other.initialized
+        assigned = other.assigned
     }
 }

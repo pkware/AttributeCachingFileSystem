@@ -67,19 +67,19 @@ internal class AttributeCachingPathSubject internal constructor(
     }
 
     private fun attributeName(attr: CacheableAttribute): String = when (attr) {
-        CacheableAttribute.BASIC -> "cachedBasicAttributes.initialized"
-        CacheableAttribute.DOS -> "cachedDosAttributes.initialized"
-        CacheableAttribute.ACL_OWNER -> "cachedAccessControlListOwner.initialized"
-        CacheableAttribute.ACL_ENTRIES -> "cachedAccessControlListEntries.initialized"
-        CacheableAttribute.POSIX -> "cachedPosixAttributes.initialized"
+        CacheableAttribute.BASIC -> "cachedBasicAttributes.assigned"
+        CacheableAttribute.DOS -> "cachedDosAttributes.assigned"
+        CacheableAttribute.ACL_OWNER -> "cachedAccessControlListOwner.assigned"
+        CacheableAttribute.ACL_ENTRIES -> "cachedAccessControlListEntries.assigned"
+        CacheableAttribute.POSIX -> "cachedPosixAttributes.assigned"
     }
 
     private fun getValueToCheck(path: AttributeCachingPath, attr: CacheableAttribute): Boolean = when (attr) {
-        CacheableAttribute.BASIC -> path.cachedBasicAttributes.initialized
-        CacheableAttribute.DOS -> path.cachedDosAttributes.initialized
-        CacheableAttribute.ACL_OWNER -> path.cachedAccessControlListOwner.initialized
-        CacheableAttribute.ACL_ENTRIES -> path.cachedAccessControlListEntries.initialized
-        CacheableAttribute.POSIX -> path.cachedPosixAttributes.initialized
+        CacheableAttribute.BASIC -> path.cachedBasicAttributes.assigned
+        CacheableAttribute.DOS -> path.cachedDosAttributes.assigned
+        CacheableAttribute.ACL_OWNER -> path.cachedAccessControlListOwner.assigned
+        CacheableAttribute.ACL_ENTRIES -> path.cachedAccessControlListEntries.assigned
+        CacheableAttribute.POSIX -> path.cachedPosixAttributes.assigned
     }
 
     enum class CacheableAttribute {
