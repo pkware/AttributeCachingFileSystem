@@ -893,8 +893,9 @@ class AttributeCachingFileSystemTests {
             val lastAccessTime = basicFileAttributes["lastAccessTime"] as FileTime
             assertThat(lastAccessTime).followedFlagRulesComparedTo(option, testDateFileTime)
 
-            assertThat(destinationCachingPath).caches(BASIC)
-            if (option != StandardCopyOption.COPY_ATTRIBUTES) {
+            if (option == StandardCopyOption.COPY_ATTRIBUTES) {
+                assertThat(destinationCachingPath).hasCacheFilled()
+            } else {
                 assertThat(destinationCachingPath).onlyCaches(BASIC)
             }
         }
@@ -955,8 +956,9 @@ class AttributeCachingFileSystemTests {
             val lastAccessTime = basicFileAttributes["lastAccessTime"] as FileTime
             assertThat(lastAccessTime).followedFlagRulesComparedTo(option, testDateFileTime)
 
-            assertThat(destinationCachingPath).caches(BASIC)
-            if (option != StandardCopyOption.COPY_ATTRIBUTES) {
+            if (option == StandardCopyOption.COPY_ATTRIBUTES) {
+                assertThat(destinationCachingPath).hasCacheFilled()
+            } else {
                 assertThat(destinationCachingPath).onlyCaches(BASIC)
             }
         }
