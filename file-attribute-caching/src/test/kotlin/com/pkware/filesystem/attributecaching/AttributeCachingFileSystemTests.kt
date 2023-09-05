@@ -4,7 +4,10 @@ import com.google.common.jimfs.Configuration
 import com.google.common.jimfs.Jimfs
 import com.google.common.truth.ComparableSubject
 import com.google.common.truth.Truth.assertThat
+import com.pkware.filesystem.attributecaching.AttributeCachingPathSubject.CacheableAttribute.ACL_ENTRIES
+import com.pkware.filesystem.attributecaching.AttributeCachingPathSubject.CacheableAttribute.ACL_OWNER
 import com.pkware.filesystem.attributecaching.AttributeCachingPathSubject.CacheableAttribute.BASIC
+import com.pkware.filesystem.attributecaching.AttributeCachingPathSubject.CacheableAttribute.DOS
 import com.pkware.filesystem.attributecaching.AttributeCachingPathSubject.CacheableAttribute.POSIX
 import com.pkware.filesystem.attributecaching.AttributeCachingPathSubject.Companion.assertThat
 import org.apache.commons.io.IOUtils
@@ -14,6 +17,7 @@ import org.junit.jupiter.api.assertThrows
 import org.junit.jupiter.api.condition.DisabledOnOs
 import org.junit.jupiter.api.condition.EnabledOnOs
 import org.junit.jupiter.api.condition.OS
+import org.junit.jupiter.api.fail
 import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.Arguments
 import org.junit.jupiter.params.provider.Arguments.arguments
@@ -875,7 +879,11 @@ class AttributeCachingFileSystemTests {
             assertThat(destinationCachingPath.exists()).isEqualTo(true)
 
             if (option == StandardCopyOption.COPY_ATTRIBUTES) {
-                assertThat(destinationCachingPath).hasAssignedCache()
+                when (getOsString(testFileSystem)) {
+                    "windows" -> assertThat(destinationCachingPath).onlyCaches(BASIC, DOS, ACL_OWNER, ACL_ENTRIES)
+                    "posix" -> assertThat(destinationCachingPath).onlyCaches(BASIC, POSIX)
+                    else -> fail("Unexpected Jimfs Operating System in use by this test.")
+                }
             } else {
                 assertThat(destinationCachingPath).hasEmptyCache()
             }
@@ -894,7 +902,11 @@ class AttributeCachingFileSystemTests {
             assertThat(lastAccessTime).followedFlagRulesComparedTo(option, testDateFileTime)
 
             if (option == StandardCopyOption.COPY_ATTRIBUTES) {
-                assertThat(destinationCachingPath).hasAssignedCache()
+                when (getOsString(testFileSystem)) {
+                    "windows" -> assertThat(destinationCachingPath).onlyCaches(BASIC, DOS, ACL_OWNER, ACL_ENTRIES)
+                    "posix" -> assertThat(destinationCachingPath).onlyCaches(BASIC, POSIX)
+                    else -> fail("Unexpected Jimfs Operating System in use by this test.")
+                }
             } else {
                 assertThat(destinationCachingPath).onlyCaches(BASIC)
             }
@@ -937,7 +949,11 @@ class AttributeCachingFileSystemTests {
             Files.move(cachingPath, destinationCachingPath, option)
 
             if (option == StandardCopyOption.COPY_ATTRIBUTES) {
-                assertThat(destinationCachingPath).hasAssignedCache()
+                when (getOsString(testFileSystem)) {
+                    "windows" -> assertThat(destinationCachingPath).onlyCaches(BASIC, DOS, ACL_OWNER, ACL_ENTRIES)
+                    "posix" -> assertThat(destinationCachingPath).onlyCaches(BASIC, POSIX)
+                    else -> fail("Unexpected Jimfs Operating System in use by this test.")
+                }
             } else {
                 assertThat(destinationCachingPath).hasEmptyCache()
             }
@@ -957,7 +973,11 @@ class AttributeCachingFileSystemTests {
             assertThat(lastAccessTime).followedFlagRulesComparedTo(option, testDateFileTime)
 
             if (option == StandardCopyOption.COPY_ATTRIBUTES) {
-                assertThat(destinationCachingPath).hasAssignedCache()
+                when (getOsString(testFileSystem)) {
+                    "windows" -> assertThat(destinationCachingPath).onlyCaches(BASIC, DOS, ACL_OWNER, ACL_ENTRIES)
+                    "posix" -> assertThat(destinationCachingPath).onlyCaches(BASIC, POSIX)
+                    else -> fail("Unexpected Jimfs Operating System in use by this test.")
+                }
             } else {
                 assertThat(destinationCachingPath).onlyCaches(BASIC)
             }
@@ -1141,6 +1161,16 @@ class AttributeCachingFileSystemTests {
             options: CopyOption,
             expected: FileTime,
         ) = if (options == StandardCopyOption.COPY_ATTRIBUTES) isEqualTo(expected) else isNotEqualTo(expected)
+
+        private fun getOsString(fileSystem: FileSystem): String {
+            val supportedViews = fileSystem.supportedFileAttributeViews()
+            return when {
+                supportedViews.contains("dos") -> "windows"
+                supportedViews.contains("posix") -> "posix"
+                supportedViews.contains("acl") -> "windows"
+                else -> "none"
+            }
+        }
     }
 }
 

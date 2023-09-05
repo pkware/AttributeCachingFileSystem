@@ -254,15 +254,28 @@ internal class AttributeCachingPath(
     @Throws(IOException::class, UnsupportedOperationException::class)
     fun copyCachedAttributesTo(target: AttributeCachingPath, forceCopyAndInitTarget: Boolean = false) {
         try {
-            // Can set null values here for any attribute set but that's okay.
-            // If any of [AttributeCachingPath]'s values are `null` and we try to access them, it will force a lookup
-            // and incur an OTHER_IOPS penalty.
+            val commonAttributeViews = delegate.fileSystem.supportedFileAttributeViews().intersect(
+                target.delegate.fileSystem.supportedFileAttributeViews(),
+            )
 
-            target.cachedBasicAttributes.copyValue(cachedBasicAttributes, forceCopyAndInitTarget)
-            target.cachedDosAttributes.copyValue(cachedDosAttributes, forceCopyAndInitTarget)
-            target.cachedPosixAttributes.copyValue(cachedPosixAttributes, forceCopyAndInitTarget)
-            target.cachedAccessControlListOwner.copyValue(cachedAccessControlListOwner, forceCopyAndInitTarget)
-            target.cachedAccessControlListEntries.copyValue(cachedAccessControlListEntries, forceCopyAndInitTarget)
+            // Copy only the attribute views shared by both filesystems.
+            for (view in commonAttributeViews) {
+                when (view) {
+                    "basic" -> target.cachedBasicAttributes.copyValue(cachedBasicAttributes, forceCopyAndInitTarget)
+                    "dos" -> target.cachedDosAttributes.copyValue(cachedDosAttributes, forceCopyAndInitTarget)
+                    "posix" -> target.cachedPosixAttributes.copyValue(cachedPosixAttributes, forceCopyAndInitTarget)
+                    "acl" -> {
+                        target.cachedAccessControlListOwner.copyValue(
+                            cachedAccessControlListOwner,
+                            forceCopyAndInitTarget,
+                        )
+                        target.cachedAccessControlListEntries.copyValue(
+                            cachedAccessControlListEntries,
+                            forceCopyAndInitTarget,
+                        )
+                    }
+                }
+            }
         } catch (expected: NoSuchFileException) {
             // Swallow NoSuchFileExceptions and skip cache checks on files that do not exist or are not regular files.
             // Checking these attributes directly does incur OTHER_IOPS penalties which we want to avoid.
