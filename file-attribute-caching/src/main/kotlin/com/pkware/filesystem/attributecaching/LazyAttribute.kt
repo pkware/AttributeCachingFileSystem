@@ -9,8 +9,6 @@ package com.pkware.filesystem.attributecaching
  */
 internal class LazyAttribute<T>(private val initializer: () -> T?) {
 
-    private var lazyValue: T? = null
-
     /**
      * Shows whether the [value] has been assigned. `true` for initialized/assigned, default is `false`.
      *
@@ -24,17 +22,17 @@ internal class LazyAttribute<T>(private val initializer: () -> T?) {
      * The mutable attribute to store. If [assigned] is false the [initializer] function is called to set the
      * attribute.
      */
-    var value: T?
+    var value: T? = null
         get() {
-            if (assigned) return lazyValue
+            if (assigned) return field
 
-            lazyValue = initializer()
+            field = initializer()
             assigned = true
 
-            return lazyValue
+            return field
         }
         set(value) {
-            lazyValue = value
+            field = value
             assigned = true
         }
 
@@ -50,10 +48,10 @@ internal class LazyAttribute<T>(private val initializer: () -> T?) {
      * values that had already been assigned
      */
     fun copyValue(other: LazyAttribute<T>, forceInitialization: Boolean = false) {
-        lazyValue = if (forceInitialization) {
+        value = if (forceInitialization || other.assigned) {
             other.value
         } else {
-            other.lazyValue
+            null
         }
         assigned = other.assigned
     }
