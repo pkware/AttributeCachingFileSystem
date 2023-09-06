@@ -1017,7 +1017,7 @@ class AttributeCachingFileSystemTests {
     }
 
     @Test
-    fun `attributes are not transferred when copying across filesystems`() {
+    fun `only common attributes are transferred when copying across filesystems`() {
         AttributeCachingFileSystem.wrapping(linuxJimfs()).use { linuxFilesystem ->
 
             val tempPath = linuxFilesystem.getPath("toCopy.txt")
@@ -1025,20 +1025,21 @@ class AttributeCachingFileSystemTests {
             Files.createFile(linuxPath)
             val originalPermissions = setOf(PosixFilePermission.OWNER_WRITE, PosixFilePermission.OWNER_READ)
             Files.setAttribute(linuxPath, "posix:permissions", originalPermissions)
-            assertThat(linuxPath).caches(POSIX)
+            Files.setAttribute(linuxPath, "lastModifiedTime", testDateFileTime)
+            assertThat(linuxPath).caches(BASIC, POSIX)
 
             AttributeCachingFileSystem.wrapping(windowsJimfs()).use { windowsFilesystem ->
 
                 val tempFile = windowsFilesystem.rootDirectories.first().resolve("temp.txt")
                 val windowsPath = windowsFilesystem.convertToCachingPath(tempFile) as AttributeCachingPath
                 Files.copy(linuxPath, windowsPath, StandardCopyOption.COPY_ATTRIBUTES)
-                assertThat(windowsPath).doesNotCache(POSIX)
+                assertThat(windowsPath).onlyCaches(BASIC)
             }
         }
     }
 
     @Test
-    fun `attributes are not transferred when moving across filesystems`() {
+    fun `only common attributes are transferred when moving across filesystems`() {
         AttributeCachingFileSystem.wrapping(linuxJimfs()).use { linuxFilesystem ->
 
             val tempPath = linuxFilesystem.getPath("toMove.txt")
@@ -1046,14 +1047,15 @@ class AttributeCachingFileSystemTests {
             Files.createFile(linuxPath)
             val originalPermissions = setOf(PosixFilePermission.OWNER_WRITE, PosixFilePermission.OWNER_READ)
             Files.setAttribute(linuxPath, "posix:permissions", originalPermissions)
-            assertThat(linuxPath).caches(POSIX)
+            Files.setAttribute(linuxPath, "lastModifiedTime", testDateFileTime)
+            assertThat(linuxPath).caches(BASIC, POSIX)
 
             AttributeCachingFileSystem.wrapping(windowsJimfs()).use { windowsFileSystem ->
 
                 val tempFile = windowsFileSystem.rootDirectories.first().resolve("temp.txt")
                 val windowsPath = windowsFileSystem.convertToCachingPath(tempFile) as AttributeCachingPath
                 Files.move(linuxPath, windowsPath, StandardCopyOption.COPY_ATTRIBUTES)
-                assertThat(windowsPath).doesNotCache(POSIX)
+                assertThat(windowsPath).onlyCaches(BASIC)
             }
         }
     }

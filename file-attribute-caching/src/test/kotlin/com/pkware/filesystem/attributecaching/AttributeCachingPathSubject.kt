@@ -32,13 +32,7 @@ internal class AttributeCachingPathSubject internal constructor(
     /**
      * Asserts that the [AttributeCachingPath] has no values cached.
      */
-    fun hasEmptyCache() = doesNotCache(
-        CacheableAttribute.BASIC,
-        CacheableAttribute.DOS,
-        CacheableAttribute.ACL_OWNER,
-        CacheableAttribute.ACL_ENTRIES,
-        CacheableAttribute.POSIX,
-    )
+    fun hasEmptyCache() = onlyCaches()
 
     /**
      * Asserts that only the given variables representing the underlying attributes are cached.
@@ -47,8 +41,7 @@ internal class AttributeCachingPathSubject internal constructor(
      */
     fun onlyCaches(vararg cacheableAttributes: CacheableAttribute) {
         checkNotNull(actual)
-        val toAllow = hashSetOf<CacheableAttribute>()
-        toAllow.addAll(cacheableAttributes)
+        val toAllow = cacheableAttributes.toSet()
         val toForbid = ALLOWED_ENTRIES.subtract(toAllow)
 
         toAllow.forEach { check(attributeName(it)).that(getValueToCheck(actual, it)).isTrue() }

@@ -12,8 +12,10 @@ class LazyAttributeTest {
             tracker.initialize()
         }
 
+        assertThat(lazyAttribute.assigned).isFalse()
         assertThat(tracker.calls).isEqualTo(0)
         assertThat(lazyAttribute.value).isEqualTo(1)
+        assertThat(lazyAttribute.assigned).isTrue()
     }
 
     @Test
@@ -43,6 +45,7 @@ class LazyAttributeTest {
 
         lazyCopy.copyValue(lazyAttribute)
         assertThat(tracker.calls).isEqualTo(0)
+        assertThat(lazyCopy.assigned).isFalse()
     }
 
     @Test
@@ -59,9 +62,31 @@ class LazyAttributeTest {
 
         lazyCopy.copyValue(lazyAttribute, false)
         assertThat(tracker.calls).isEqualTo(0)
+        assertThat(lazyCopy.assigned).isFalse()
 
         lazyCopy.copyValue(lazyAttribute, true)
         assertThat(tracker.calls).isEqualTo(1)
+        assertThat(lazyCopy.assigned).isTrue()
+    }
+
+    @Test
+    fun `assignment is retained when forcedInitialization is false`() {
+        val initialTracker = InitializedTracker()
+        val lazyAttribute = LazyAttribute {
+            initialTracker.initialize()
+        }
+        val lazyTracker = InitializedTracker()
+        val lazyCopy = LazyAttribute {
+            lazyTracker.initialize()
+        }
+
+        lazyAttribute.value = 999
+        assertThat(lazyAttribute.assigned).isTrue()
+        assertThat(lazyAttribute.value).isEqualTo(999)
+
+        lazyCopy.copyValue(lazyAttribute, false)
+        assertThat(lazyCopy.assigned).isTrue()
+        assertThat(lazyCopy.value).isEqualTo(999)
     }
 }
 

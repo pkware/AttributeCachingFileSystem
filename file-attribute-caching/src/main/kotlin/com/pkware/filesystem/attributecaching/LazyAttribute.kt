@@ -12,8 +12,8 @@ internal class LazyAttribute<T>(private val initializer: () -> T?) {
     /**
      * Shows whether the [value] has been assigned. `true` for initialized/assigned, default is `false`.
      *
-     * If a value is assigned that means it has either had its initializer called via the invocation of its getter
-     * or its setter.
+     * If a value is [assigned] that means the value has been assigned via its setter or the getter has triggered an
+     * invocation of the [initializer].
      */
     var assigned: Boolean = false
         private set
