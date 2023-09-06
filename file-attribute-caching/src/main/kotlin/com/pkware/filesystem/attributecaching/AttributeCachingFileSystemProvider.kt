@@ -119,7 +119,7 @@ internal class AttributeCachingFileSystemProvider : FileSystemProvider() {
                 it != StandardCopyOption.COPY_ATTRIBUTES
             }.toTypedArray()
 
-            source.copyCachedAttributesTo(target)
+            source.copyCachedAttributesTo(target, true)
             Files.copy(actualSourcePath, actualTargetPath, *newOptions)
         } else {
             // If the StandardCopyOption.COPY_ATTRIBUTES option is not selected, there is no need to cache the
@@ -159,7 +159,7 @@ internal class AttributeCachingFileSystemProvider : FileSystemProvider() {
                 it != StandardCopyOption.COPY_ATTRIBUTES
             }.toTypedArray()
 
-            source.copyCachedAttributesTo(target)
+            source.copyCachedAttributesTo(target, true)
             Files.move(actualSourcePath, actualTargetPath, *newOptions)
         } else {
             // If the StandardCopyOption.COPY_ATTRIBUTES option is not selected, there is no need to cache the
@@ -344,7 +344,7 @@ internal class AttributeCachingFileSystemProvider : FileSystemProvider() {
      * @param path The [Path] to set the given [attribute] on. It must be a [AttributeCachingPath] otherwise an
      * [IOException] will be thrown.
      * @param attribute The attribute name to set and associate with the [path].
-     * @param value The value of the [attribute] to set.
+     * @param value The value of the [attribute] to set, can be `null`.
      * @param options The [LinkOption]s indicating how symbolic links are handled.
      * @throws IOException If an IO error occurs.
      * @throws UnsupportedOperationException If the attribute view for the given [attribute] name is not available.
@@ -362,9 +362,6 @@ internal class AttributeCachingFileSystemProvider : FileSystemProvider() {
             return
         }
 
-        val delegatePath = path.delegate
-        val delegateProvider = delegatePath.fileSystem.provider()
-
         // Then set our cache
         // Need to make sure that we only supply class names to path.setAttributeByName
         // cannot set single attribute in the cache
@@ -377,11 +374,11 @@ internal class AttributeCachingFileSystemProvider : FileSystemProvider() {
 
         // Even if we have a single attribute only we should get the entire attribute view class for that single
         // attribute to properly set the cache.
-        val fileAttributeView: FileAttributeView? = delegateProvider.getFileAttributeView(
-            delegatePath,
+        val fileAttributeView: FileAttributeView? = provider.getFileAttributeView(
+            path.delegate,
             getAttributeViewJavaClassType(attributeCacheKey),
         )
-        path.setAttributeByName(attributeCacheKey, fileAttributeView)
+        path.setAttributeByNameUsingView(attributeCacheKey, fileAttributeView)
     }
 
     /**
