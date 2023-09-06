@@ -1,8 +1,15 @@
 package com.pkware.filesystem.attributecaching
 
+import com.google.common.jimfs.Configuration
 import com.google.common.jimfs.Jimfs
 import com.google.common.truth.ComparableSubject
 import com.google.common.truth.Truth.assertThat
+import com.pkware.filesystem.attributecaching.AttributeCachingPathSubject.CacheableAttribute.ACL_ENTRIES
+import com.pkware.filesystem.attributecaching.AttributeCachingPathSubject.CacheableAttribute.ACL_OWNER
+import com.pkware.filesystem.attributecaching.AttributeCachingPathSubject.CacheableAttribute.BASIC
+import com.pkware.filesystem.attributecaching.AttributeCachingPathSubject.CacheableAttribute.DOS
+import com.pkware.filesystem.attributecaching.AttributeCachingPathSubject.CacheableAttribute.POSIX
+import com.pkware.filesystem.attributecaching.AttributeCachingPathSubject.Companion.assertThat
 import org.apache.commons.io.IOUtils
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertDoesNotThrow
@@ -10,6 +17,7 @@ import org.junit.jupiter.api.assertThrows
 import org.junit.jupiter.api.condition.DisabledOnOs
 import org.junit.jupiter.api.condition.EnabledOnOs
 import org.junit.jupiter.api.condition.OS
+import org.junit.jupiter.api.fail
 import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.Arguments
 import org.junit.jupiter.params.provider.Arguments.arguments
@@ -41,6 +49,7 @@ import java.util.stream.Stream
 import kotlin.concurrent.thread
 import kotlin.io.path.div
 import kotlin.io.path.exists
+import kotlin.io.path.getLastModifiedTime
 
 class AttributeCachingFileSystemTests {
 
@@ -77,7 +86,7 @@ class AttributeCachingFileSystemTests {
 
     @ParameterizedTest
     @MethodSource("allFileSystems")
-    fun `cache gets initialized only after file exists and getPath is called`(fileSystem: FileSystem) {
+    fun `attributes are cached on demand when using getPath`(fileSystem: FileSystem) {
         val tempDirPath = fileSystem.getPath("temp")
         Files.createDirectory(tempDirPath)
         var testPath = fileSystem.getPath("$tempDirPath${fileSystem.separator}testfile.txt")
@@ -91,17 +100,18 @@ class AttributeCachingFileSystemTests {
             testPath = it.getPath("$tempDirPath${it.separator}testfile.txt")
             assertThat(testPath).isInstanceOf(AttributeCachingPath::class.java)
             val cachingPath = testPath as AttributeCachingPath
-            assertThat(cachingPath.isCachedInitialized()).isTrue()
+            assertThat(cachingPath).hasEmptyCache()
 
             // now read attributes from caching path and verify they dont change
             val attributesMap = Files.readAttributes(cachingPath, "*")
             assertThat(attributesMap).isNotEmpty()
+            assertThat(cachingPath).caches(BASIC)
         }
     }
 
     @ParameterizedTest
     @MethodSource("allFileSystems")
-    fun `cache gets initialized only after file exists and convertToCachingPath is called`(fileSystem: FileSystem) {
+    fun `attributes are cached on demand when using convertToCachingPath`(fileSystem: FileSystem) {
         val tempDirPath = fileSystem.getPath("temp")
         Files.createDirectory(tempDirPath)
         val testPath = fileSystem.getPath("$tempDirPath${fileSystem.separator}testfile.txt")
@@ -114,11 +124,12 @@ class AttributeCachingFileSystemTests {
             var cachingPath = it.convertToCachingPath(testPath)
             assertThat(cachingPath).isInstanceOf(AttributeCachingPath::class.java)
             cachingPath = cachingPath as AttributeCachingPath
-            assertThat(cachingPath.isCachedInitialized()).isTrue()
+            assertThat(cachingPath).hasEmptyCache()
 
             // now read attributes from caching path and verify they are populated
             val attributesMap = Files.readAttributes(cachingPath, "*")
             assertThat(attributesMap).isNotEmpty()
+            assertThat(cachingPath).caches(BASIC)
         }
     }
 
@@ -195,31 +206,68 @@ class AttributeCachingFileSystemTests {
 
     @ParameterizedTest
     @MethodSource("allFileSystems")
-    fun `normalize returns a cachingPath and copies attributes`(fileSystem: FileSystem) =
-        AttributeCachingFileSystem.wrapping(fileSystem).use {
-            val tempParentDirPath = it.getPath("temp")
-            val tempDirPath = it.getPath("temp${it.separator}test")
-            Files.createDirectory(tempParentDirPath)
-            Files.createDirectory(tempDirPath)
-            val cachingPath = it.getPath(
-                "temp${it.separator}.${it.separator}.${it.separator}test${it.separator}test.txt",
-            )
-            Files.createFile(cachingPath)
-            Files.newOutputStream(cachingPath).use { outputStream ->
-                outputStream.write("hello".toByteArray(Charsets.UTF_8))
-            }
-
-            Files.setAttribute(cachingPath, "lastModifiedTime", testDateFileTime)
-
-            val normalizedPath = cachingPath.normalize()
-            assertThat(cachingPath).isInstanceOf(AttributeCachingPath::class.java)
-            assertThat(normalizedPath).isInstanceOf(AttributeCachingPath::class.java)
-
-            // now read attributes from absolutePath path
-            val attributesMap = Files.readAttributes(normalizedPath, "*")
-
-            assertThat(attributesMap["lastModifiedTime"]).isEqualTo(testDateFileTime)
+    fun `normalize returns a cachingPath and copies attributes if they were previously cached`(
+        fileSystem: FileSystem,
+    ) = AttributeCachingFileSystem.wrapping(fileSystem).use {
+        val tempParentDirPath = it.getPath("temp")
+        val tempDirPath = it.getPath("temp${it.separator}test")
+        Files.createDirectory(tempParentDirPath)
+        Files.createDirectory(tempDirPath)
+        val cachingPath = it.getPath(
+            "temp${it.separator}.${it.separator}.${it.separator}test${it.separator}test.txt",
+        )
+        Files.createFile(cachingPath)
+        Files.newOutputStream(cachingPath).use { outputStream ->
+            outputStream.write("hello".toByteArray(Charsets.UTF_8))
         }
+
+        // cache basic attributes with setAttribute lastModifiedTime
+        Files.setAttribute(cachingPath, "lastModifiedTime", testDateFileTime)
+
+        assertThat(cachingPath).isInstanceOf(AttributeCachingPath::class.java)
+        assertThat(cachingPath as AttributeCachingPath).onlyCaches(BASIC)
+
+        val normalizedPath = cachingPath.normalize()
+
+        assertThat(normalizedPath).isInstanceOf(AttributeCachingPath::class.java)
+        assertThat(normalizedPath as AttributeCachingPath).onlyCaches(BASIC)
+
+        // write stuff to realPath to force lastModifiedTime update
+        Files.newOutputStream(normalizedPath).use { outputStream ->
+            outputStream.write("rewrite".toByteArray(Charsets.UTF_8))
+        }
+
+        // now read attributes from absolutePath path
+        val attributesMap = Files.readAttributes(normalizedPath, "*")
+
+        assertThat(attributesMap["lastModifiedTime"]).isEqualTo(testDateFileTime)
+    }
+
+    @ParameterizedTest
+    @MethodSource("allFileSystems")
+    fun `normalize returns a cachingPath and does not copy attributes if they were not previously cached`(
+        fileSystem: FileSystem,
+    ) = AttributeCachingFileSystem.wrapping(fileSystem).use {
+        val tempParentDirPath = it.getPath("temp")
+        val tempDirPath = it.getPath("temp${it.separator}test")
+        Files.createDirectory(tempParentDirPath)
+        Files.createDirectory(tempDirPath)
+        val cachingPath = it.getPath(
+            "temp${it.separator}.${it.separator}.${it.separator}test${it.separator}test.txt",
+        )
+        Files.createFile(cachingPath)
+        Files.newOutputStream(cachingPath).use { outputStream ->
+            outputStream.write("hello".toByteArray(Charsets.UTF_8))
+        }
+
+        assertThat(cachingPath).isInstanceOf(AttributeCachingPath::class.java)
+        assertThat(cachingPath as AttributeCachingPath).hasEmptyCache()
+
+        val normalizedPath = cachingPath.normalize()
+
+        assertThat(normalizedPath).isInstanceOf(AttributeCachingPath::class.java)
+        assertThat(normalizedPath as AttributeCachingPath).hasEmptyCache()
+    }
 
     @ParameterizedTest
     @MethodSource("allFileSystems")
@@ -282,47 +330,109 @@ class AttributeCachingFileSystemTests {
 
     @ParameterizedTest
     @MethodSource("allFileSystems")
-    fun `toAbsolutePath returns a cachingPath and copies attributes`(fileSystem: FileSystem) =
-        AttributeCachingFileSystem.wrapping(fileSystem).use {
-            val cachingPath = it.getPath("test.txt")
-            Files.createFile(cachingPath)
-            Files.newOutputStream(cachingPath).use { outputStream ->
-                outputStream.write("hello".toByteArray(Charsets.UTF_8))
-            }
-
-            Files.setAttribute(cachingPath, "lastModifiedTime", testDateFileTime)
-
-            val absolutePath = cachingPath.toAbsolutePath()
-            assertThat(cachingPath).isInstanceOf(AttributeCachingPath::class.java)
-            assertThat(absolutePath).isInstanceOf(AttributeCachingPath::class.java)
-
-            // now read attributes from absolutePath path
-            val attributesMap = Files.readAttributes(absolutePath, "*")
-
-            assertThat(attributesMap["lastModifiedTime"]).isEqualTo(testDateFileTime)
+    fun `toAbsolutePath returns a cachingPath and copies attributes if they were previously cached`(
+        fileSystem: FileSystem,
+    ) = AttributeCachingFileSystem.wrapping(fileSystem).use {
+        val cachingPath = it.getPath("test.txt")
+        Files.createFile(cachingPath)
+        Files.newOutputStream(cachingPath).use { outputStream ->
+            outputStream.write("hello".toByteArray(Charsets.UTF_8))
         }
+
+        // cache basic attributes with setAttribute lastModifiedTime
+        Files.setAttribute(cachingPath, "lastModifiedTime", testDateFileTime)
+
+        assertThat(cachingPath).isInstanceOf(AttributeCachingPath::class.java)
+        assertThat(cachingPath as AttributeCachingPath).onlyCaches(BASIC)
+
+        val absolutePath = cachingPath.toAbsolutePath()
+
+        assertThat(absolutePath).isInstanceOf(AttributeCachingPath::class.java)
+        assertThat(absolutePath as AttributeCachingPath).onlyCaches(BASIC)
+
+        // write stuff to realPath to force lastModifiedTime update
+        Files.newOutputStream(absolutePath).use { outputStream ->
+            outputStream.write("rewrite".toByteArray(Charsets.UTF_8))
+        }
+
+        // now read attributes from absolutePath path to confirm they were saved
+        val attributesMap = Files.readAttributes(absolutePath, "*")
+
+        assertThat(attributesMap["lastModifiedTime"]).isEqualTo(testDateFileTime)
+    }
 
     @ParameterizedTest
     @MethodSource("allFileSystems")
-    fun `toRealPath returns a cachingPath and copies attributes`(fileSystem: FileSystem) =
-        AttributeCachingFileSystem.wrapping(fileSystem).use {
-            val cachingPath = it.getPath("test.txt")
-            Files.createFile(cachingPath)
-            Files.newOutputStream(cachingPath).use { outputStream ->
-                outputStream.write("hello".toByteArray(Charsets.UTF_8))
-            }
-
-            Files.setAttribute(cachingPath, "lastModifiedTime", testDateFileTime)
-
-            val realPath = cachingPath.toRealPath()
-            assertThat(cachingPath).isInstanceOf(AttributeCachingPath::class.java)
-            assertThat(realPath).isInstanceOf(AttributeCachingPath::class.java)
-
-            // now read attributes from absolutePath path
-            val attributesMap = Files.readAttributes(realPath, "*")
-
-            assertThat(attributesMap["lastModifiedTime"]).isEqualTo(testDateFileTime)
+    fun `toAbsolutePath returns a cachingPath and does not copy attributes if they were not previously cached`(
+        fileSystem: FileSystem,
+    ) = AttributeCachingFileSystem.wrapping(fileSystem).use {
+        val cachingPath = it.getPath("test.txt")
+        Files.createFile(cachingPath)
+        Files.newOutputStream(cachingPath).use { outputStream ->
+            outputStream.write("hello".toByteArray(Charsets.UTF_8))
         }
+
+        assertThat(cachingPath).isInstanceOf(AttributeCachingPath::class.java)
+        assertThat(cachingPath as AttributeCachingPath).hasEmptyCache()
+
+        val absolutePath = cachingPath.toAbsolutePath()
+
+        assertThat(absolutePath).isInstanceOf(AttributeCachingPath::class.java)
+        assertThat(absolutePath as AttributeCachingPath).hasEmptyCache()
+    }
+
+    @ParameterizedTest
+    @MethodSource("allFileSystems")
+    fun `toRealPath returns a cachingPath and copies attributes if they were previously cached`(
+        fileSystem: FileSystem,
+    ) = AttributeCachingFileSystem.wrapping(fileSystem).use {
+        val cachingPath = it.getPath("test.txt")
+        Files.createFile(cachingPath)
+        Files.newOutputStream(cachingPath).use { outputStream ->
+            outputStream.write("hello".toByteArray(Charsets.UTF_8))
+        }
+
+        // cache basic attributes with setAttribute lastModifiedTime
+        Files.setAttribute(cachingPath, "lastModifiedTime", testDateFileTime)
+
+        assertThat(cachingPath).isInstanceOf(AttributeCachingPath::class.java)
+        assertThat(cachingPath as AttributeCachingPath).onlyCaches(BASIC)
+
+        val realPath = cachingPath.toRealPath()
+
+        assertThat(realPath).isInstanceOf(AttributeCachingPath::class.java)
+        assertThat(realPath as AttributeCachingPath).onlyCaches(BASIC)
+
+        // write stuff to realPath to force lastModifiedTime update
+        Files.newOutputStream(realPath).use { outputStream ->
+            outputStream.write("rewrite".toByteArray(Charsets.UTF_8))
+        }
+
+        // now read attributes from realPath path to confirm they were saved
+        val attributesMap = Files.readAttributes(realPath, "*")
+
+        assertThat(attributesMap["lastModifiedTime"]).isEqualTo(testDateFileTime)
+    }
+
+    @ParameterizedTest
+    @MethodSource("allFileSystems")
+    fun `toRealPath returns a cachingPath and does not copy attributes if they were not previously cached`(
+        fileSystem: FileSystem,
+    ) = AttributeCachingFileSystem.wrapping(fileSystem).use {
+        val cachingPath = it.getPath("test.txt")
+        Files.createFile(cachingPath)
+        Files.newOutputStream(cachingPath).use { outputStream ->
+            outputStream.write("hello".toByteArray(Charsets.UTF_8))
+        }
+
+        assertThat(cachingPath).isInstanceOf(AttributeCachingPath::class.java)
+        assertThat(cachingPath as AttributeCachingPath).hasEmptyCache()
+
+        val realPath = cachingPath.toRealPath()
+
+        assertThat(realPath).isInstanceOf(AttributeCachingPath::class.java)
+        assertThat(realPath as AttributeCachingPath).hasEmptyCache()
+    }
 
     @ParameterizedTest
     @MethodSource("allTypes")
@@ -387,7 +497,7 @@ class AttributeCachingFileSystemTests {
         val testDir = javaTmpDir / "TEST-POSIX-$uniqueID"
         Files.createDirectories(testDir)
 
-        var cachingPath = testDir / "testfile-$uniqueID.txt"
+        val cachingPath = testDir / "testfile-$uniqueID.txt"
 
         Files.createFile(cachingPath)
         Files.newOutputStream(cachingPath).use { outputStream ->
@@ -395,16 +505,14 @@ class AttributeCachingFileSystemTests {
         }
 
         assertThat(cachingPath).isInstanceOf(AttributeCachingPath::class.java)
-        assertThat((cachingPath as AttributeCachingPath).isCachedInitialized()).isFalse()
-        // Force cachingPath initialization after the file is created with getPath on the path's string representation.
-        // This test requires that the cache of the file under test be initialized.
-        cachingPath = it.getPath(cachingPath.toString())
-        assertThat((cachingPath as AttributeCachingPath).isCachedInitialized()).isTrue()
+
+        assertThat(cachingPath as AttributeCachingPath).hasEmptyCache()
 
         try {
             // Test with original file owner and group on default filesystem because it's a large amount of work to
             // create our own test user and group there.
             val originalAttributeMapOwner = Files.readAttributes(cachingPath, "posix:owner")
+
             val owner = originalAttributeMapOwner["owner"] as? UserPrincipal
             val originalAttributeMapGroup = Files.readAttributes(cachingPath, "posix:group")
             val group = originalAttributeMapGroup["group"] as? GroupPrincipal
@@ -419,6 +527,7 @@ class AttributeCachingFileSystemTests {
             Files.setAttribute(cachingPath, "posix:owner", owner)
             Files.setAttribute(cachingPath, "posix:group", group)
             Files.setAttribute(cachingPath, "posix:permissions", permissions)
+
             val attributesMap = Files.readAttributes(cachingPath, "posix:*")
 
             assertThat(attributesMap.size).isEqualTo(12)
@@ -447,7 +556,7 @@ class AttributeCachingFileSystemTests {
             val javaTmpDir = it.getPath(System.getProperty("java.io.tmpdir"))
             val testDir = javaTmpDir / "TEST-ACL-$uniqueID"
             Files.createDirectories(testDir)
-            var cachingPath = testDir / "testfile-$uniqueID.txt"
+            val cachingPath = testDir / "testfile-$uniqueID.txt"
 
             Files.createFile(cachingPath)
             Files.newOutputStream(cachingPath).use { outputStream ->
@@ -455,16 +564,14 @@ class AttributeCachingFileSystemTests {
             }
 
             assertThat(cachingPath).isInstanceOf(AttributeCachingPath::class.java)
-            assertThat((cachingPath as AttributeCachingPath).isCachedInitialized()).isFalse()
-            // Force cachingPath initialization after the file is created with getPath on the path's string representation.
-            // This test requires that the cache of the file under test be initialized.
-            cachingPath = it.getPath(cachingPath.toString())
-            assertThat((cachingPath as AttributeCachingPath).isCachedInitialized()).isTrue()
+
+            assertThat(cachingPath as AttributeCachingPath).hasEmptyCache()
 
             try {
                 // Test with original file owner on default filesystem because it's a large amount of work to create our
                 // own test user there.
                 val originalAttributesMap = Files.readAttributes(cachingPath, "acl:owner")
+
                 val owner = originalAttributesMap["owner"] as? UserPrincipal
                 val acl = AclEntry.newBuilder()
                     .setType(AclEntryType.ALLOW)
@@ -487,6 +594,7 @@ class AttributeCachingFileSystemTests {
 
                 Files.setAttribute(cachingPath, "acl:owner", owner)
                 Files.setAttribute(cachingPath, "acl:acl", aclEntries)
+
                 val attributesMap = Files.readAttributes(cachingPath, "acl:*")
 
                 // verify that attribute is "right" type returned from the provider
@@ -512,7 +620,7 @@ class AttributeCachingFileSystemTests {
             val javaTmpDir = it.getPath(System.getProperty("java.io.tmpdir"))
             val testDir = javaTmpDir / "TEST-ACL-$uniqueID"
             Files.createDirectories(testDir)
-            var cachingPath = testDir / "testfile-$uniqueID.txt"
+            val cachingPath = testDir / "testfile-$uniqueID.txt"
 
             Files.createFile(cachingPath)
             Files.newOutputStream(cachingPath).use { outputStream ->
@@ -520,17 +628,14 @@ class AttributeCachingFileSystemTests {
             }
 
             assertThat(cachingPath).isInstanceOf(AttributeCachingPath::class.java)
-            assertThat((cachingPath as AttributeCachingPath).isCachedInitialized()).isFalse()
-            // Force cachingPath initialization after the file is created with getPath on the path's string representation.
-            // This test requires that the cache of the file under test be initialized.
-            cachingPath = it.getPath(cachingPath.toString())
-            assertThat((cachingPath as AttributeCachingPath).isCachedInitialized()).isTrue()
+            assertThat(cachingPath as AttributeCachingPath).hasEmptyCache()
 
             try {
                 // Test with original file owner on default filesystem because it's a large amount of work to create our
                 // own test user there.
 
                 val originalAttributeMap = Files.readAttributes(cachingPath, "acl:*")
+
                 val originalOwner = originalAttributeMap["owner"] as? UserPrincipal
 
                 @Suppress("UNCHECKED_CAST")
@@ -589,7 +694,7 @@ class AttributeCachingFileSystemTests {
             val javaTmpDir = it.getPath(System.getProperty("java.io.tmpdir"))
             val testDir = javaTmpDir / "TEST-ACL-$uniqueID"
             Files.createDirectories(testDir)
-            var cachingPath = testDir / "testfile-$uniqueID.txt"
+            val cachingPath = testDir / "testfile-$uniqueID.txt"
 
             Files.createFile(cachingPath)
             Files.newOutputStream(cachingPath).use { outputStream ->
@@ -597,11 +702,8 @@ class AttributeCachingFileSystemTests {
             }
 
             assertThat(cachingPath).isInstanceOf(AttributeCachingPath::class.java)
-            assertThat((cachingPath as AttributeCachingPath).isCachedInitialized()).isFalse()
-            // Force cachingPath initialization after the file is created with getPath on the path's string representation.
-            // This test requires that the cache of the file under test be initialized.
-            cachingPath = it.getPath(cachingPath.toString())
-            assertThat((cachingPath as AttributeCachingPath).isCachedInitialized()).isTrue()
+
+            assertThat(cachingPath as AttributeCachingPath).hasEmptyCache()
 
             try {
                 // Test with original file owner on default filesystem because it's a large amount of work to create our
@@ -610,6 +712,8 @@ class AttributeCachingFileSystemTests {
                 val originalAttributeView = Files.getFileAttributeView(cachingPath, AclFileAttributeView::class.java)
                 val originalOwner = originalAttributeView.owner
                 val originalAclEntries = originalAttributeView.acl
+
+                assertThat(cachingPath).hasEmptyCache()
 
                 // simulate concurrent modification on default filesystem
                 val concurrentPath = defaultFileSystem.getPath(
@@ -643,6 +747,7 @@ class AttributeCachingFileSystemTests {
                 assertThat(originalOwner).isEqualTo(newOwner)
                 // acl entries do change because we modified the acl entries in the concurrent file path
                 assertThat(originalAclEntries).doesNotContain(newAclEntries)
+                assertThat(cachingPath).hasEmptyCache()
             } finally {
                 Files.deleteIfExists(cachingPath)
                 Files.deleteIfExists(testDir)
@@ -741,38 +846,72 @@ class AttributeCachingFileSystemTests {
     fun `copy file from source to target`(
         option: CopyOption,
         fileSystem: () -> FileSystem,
-    ) = AttributeCachingFileSystem.wrapping(fileSystem()).use {
-        // get filesystem attribute caching path
-        val cachingPath = it.getPath("testfile.txt")
-        Files.createFile(cachingPath)
-        Files.newOutputStream(cachingPath).use { outputStream ->
-            outputStream.write("hello".toByteArray(Charsets.UTF_8))
+    ) {
+        val testFileSystem = fileSystem()
+        AttributeCachingFileSystem.wrapping(testFileSystem).use {
+            // get filesystem attribute caching path
+            val cachingPath = it.getPath("testfile.txt")
+            Files.createFile(cachingPath)
+            Files.newOutputStream(cachingPath).use { outputStream ->
+                outputStream.write("hello".toByteArray(Charsets.UTF_8))
+            }
+
+            assertThat(cachingPath).isInstanceOf(AttributeCachingPath::class.java)
+
+            assertThat(cachingPath as AttributeCachingPath).hasEmptyCache()
+
+            Files.setAttribute(cachingPath, "creationTime", testDateFileTime)
+            Files.setAttribute(cachingPath, "lastModifiedTime", testDateFileTime)
+            Files.setAttribute(cachingPath, "lastAccessTime", testDateFileTime)
+
+            assertThat(cachingPath).onlyCaches(BASIC)
+
+            val destinationCachingPath = it.getPath("testfile2.txt")
+
+            assertThat(destinationCachingPath).isInstanceOf(AttributeCachingPath::class.java)
+
+            assertThat(destinationCachingPath as AttributeCachingPath).hasEmptyCache()
+
+            assertThat(destinationCachingPath.exists()).isEqualTo(false)
+
+            Files.copy(cachingPath, destinationCachingPath, option)
+
+            assertThat(cachingPath.exists()).isEqualTo(true)
+            assertThat(destinationCachingPath.exists()).isEqualTo(true)
+
+            if (option == StandardCopyOption.COPY_ATTRIBUTES) {
+                when (getOsString(testFileSystem)) {
+                    "windows" -> assertThat(destinationCachingPath).onlyCaches(BASIC, DOS, ACL_OWNER, ACL_ENTRIES)
+                    "posix" -> assertThat(destinationCachingPath).onlyCaches(BASIC, POSIX)
+                    else -> fail("Unexpected Jimfs Operating System in use by this test.")
+                }
+            } else {
+                assertThat(destinationCachingPath).hasEmptyCache()
+            }
+
+            Files.newInputStream(destinationCachingPath).use { inputStream ->
+                val bytes = IOUtils.toByteArray(inputStream)
+                assertThat(String(bytes, Charsets.UTF_8)).isEqualTo("hello")
+            }
+
+            val basicFileAttributes = Files.readAttributes(destinationCachingPath, "*")
+            val creationTime = basicFileAttributes["creationTime"] as FileTime
+            assertThat(creationTime).followedFlagRulesComparedTo(option, testDateFileTime)
+            val lastModifiedTime = basicFileAttributes["lastModifiedTime"] as FileTime
+            assertThat(lastModifiedTime).followedFlagRulesComparedTo(option, testDateFileTime)
+            val lastAccessTime = basicFileAttributes["lastAccessTime"] as FileTime
+            assertThat(lastAccessTime).followedFlagRulesComparedTo(option, testDateFileTime)
+
+            if (option == StandardCopyOption.COPY_ATTRIBUTES) {
+                when (getOsString(testFileSystem)) {
+                    "windows" -> assertThat(destinationCachingPath).onlyCaches(BASIC, DOS, ACL_OWNER, ACL_ENTRIES)
+                    "posix" -> assertThat(destinationCachingPath).onlyCaches(BASIC, POSIX)
+                    else -> fail("Unexpected Jimfs Operating System in use by this test.")
+                }
+            } else {
+                assertThat(destinationCachingPath).onlyCaches(BASIC)
+            }
         }
-        Files.setAttribute(cachingPath, "creationTime", testDateFileTime)
-        Files.setAttribute(cachingPath, "lastModifiedTime", testDateFileTime)
-        Files.setAttribute(cachingPath, "lastAccessTime", testDateFileTime)
-
-        val destinationCachingPath = it.getPath("testfile2.txt")
-
-        assertThat(destinationCachingPath.exists()).isEqualTo(false)
-
-        Files.copy(cachingPath, destinationCachingPath, option)
-
-        assertThat(cachingPath.exists()).isEqualTo(true)
-        assertThat(destinationCachingPath.exists()).isEqualTo(true)
-
-        Files.newInputStream(destinationCachingPath).use { inputStream ->
-            val bytes = IOUtils.toByteArray(inputStream)
-            assertThat(String(bytes, Charsets.UTF_8)).isEqualTo("hello")
-        }
-
-        val basicFileAttributes = Files.readAttributes(destinationCachingPath, "*")
-        val creationTime = basicFileAttributes["creationTime"] as FileTime
-        assertThat(creationTime).followedFlagRulesComparedTo(option, testDateFileTime)
-        val lastModifiedTime = basicFileAttributes["lastModifiedTime"] as FileTime
-        assertThat(lastModifiedTime).followedFlagRulesComparedTo(option, testDateFileTime)
-        val lastAccessTime = basicFileAttributes["lastAccessTime"] as FileTime
-        assertThat(lastAccessTime).followedFlagRulesComparedTo(option, testDateFileTime)
     }
 
     @ParameterizedTest
@@ -780,38 +919,70 @@ class AttributeCachingFileSystemTests {
     fun `move file from source to target`(
         option: CopyOption,
         fileSystem: () -> FileSystem,
-    ) = AttributeCachingFileSystem.wrapping(fileSystem()).use {
-        // get filesystem attribute caching path
-        val cachingPath = it.getPath("testfile.txt")
-        Files.createFile(cachingPath)
-        Files.newOutputStream(cachingPath).use { outputStream ->
-            outputStream.write("hello".toByteArray(Charsets.UTF_8))
+    ) {
+        val testFileSystem = fileSystem()
+        AttributeCachingFileSystem.wrapping(testFileSystem).use {
+            // get filesystem attribute caching path
+            val cachingPath = it.getPath("testfile.txt")
+            Files.createFile(cachingPath)
+            Files.newOutputStream(cachingPath).use { outputStream ->
+                outputStream.write("hello".toByteArray(Charsets.UTF_8))
+            }
+
+            assertThat(cachingPath).isInstanceOf(AttributeCachingPath::class.java)
+
+            assertThat(cachingPath as AttributeCachingPath).hasEmptyCache()
+
+            Files.setAttribute(cachingPath, "creationTime", testDateFileTime)
+            Files.setAttribute(cachingPath, "lastModifiedTime", testDateFileTime)
+            Files.setAttribute(cachingPath, "lastAccessTime", testDateFileTime)
+
+            assertThat(cachingPath).onlyCaches(BASIC)
+
+            // ensure temp directory exists
+            Files.createDirectory(it.getPath("temp"))
+            val destinationCachingPath = it.getPath("temp", "testfile2.txt")
+
+            assertThat(destinationCachingPath as AttributeCachingPath).hasEmptyCache()
+
+            assertThat(destinationCachingPath.exists()).isEqualTo(false)
+
+            Files.move(cachingPath, destinationCachingPath, option)
+
+            if (option == StandardCopyOption.COPY_ATTRIBUTES) {
+                when (getOsString(testFileSystem)) {
+                    "windows" -> assertThat(destinationCachingPath).onlyCaches(BASIC, DOS, ACL_OWNER, ACL_ENTRIES)
+                    "posix" -> assertThat(destinationCachingPath).onlyCaches(BASIC, POSIX)
+                    else -> fail("Unexpected Jimfs Operating System in use by this test.")
+                }
+            } else {
+                assertThat(destinationCachingPath).hasEmptyCache()
+            }
+
+            assertThat(cachingPath.exists()).isEqualTo(false)
+
+            Files.newInputStream(destinationCachingPath).use { inputStream ->
+                val bytes = IOUtils.toByteArray(inputStream)
+                assertThat(String(bytes, Charsets.UTF_8)).isEqualTo("hello")
+            }
+            val basicFileAttributes = Files.readAttributes(destinationCachingPath, "*")
+
+            // creation and move time are preserved for a move regardless of the option flag used
+            assertThat(basicFileAttributes["creationTime"]).isEqualTo(testDateFileTime)
+            assertThat(basicFileAttributes["lastModifiedTime"]).isEqualTo(testDateFileTime)
+            val lastAccessTime = basicFileAttributes["lastAccessTime"] as FileTime
+            assertThat(lastAccessTime).followedFlagRulesComparedTo(option, testDateFileTime)
+
+            if (option == StandardCopyOption.COPY_ATTRIBUTES) {
+                when (getOsString(testFileSystem)) {
+                    "windows" -> assertThat(destinationCachingPath).onlyCaches(BASIC, DOS, ACL_OWNER, ACL_ENTRIES)
+                    "posix" -> assertThat(destinationCachingPath).onlyCaches(BASIC, POSIX)
+                    else -> fail("Unexpected Jimfs Operating System in use by this test.")
+                }
+            } else {
+                assertThat(destinationCachingPath).onlyCaches(BASIC)
+            }
         }
-        Files.setAttribute(cachingPath, "creationTime", testDateFileTime)
-        Files.setAttribute(cachingPath, "lastModifiedTime", testDateFileTime)
-        Files.setAttribute(cachingPath, "lastAccessTime", testDateFileTime)
-
-        // ensure temp directory exists
-        Files.createDirectory(it.getPath("temp"))
-        val destinationCachingPath = it.getPath("temp", "testfile2.txt")
-
-        assertThat(destinationCachingPath.exists()).isEqualTo(false)
-
-        Files.move(cachingPath, destinationCachingPath, option)
-
-        assertThat(cachingPath.exists()).isEqualTo(false)
-
-        Files.newInputStream(destinationCachingPath).use { inputStream ->
-            val bytes = IOUtils.toByteArray(inputStream)
-            assertThat(String(bytes, Charsets.UTF_8)).isEqualTo("hello")
-        }
-        val basicFileAttributes = Files.readAttributes(destinationCachingPath, "*")
-
-        // creation and move time are preserved for a move regardless of the option flag used
-        assertThat(basicFileAttributes["creationTime"]).isEqualTo(testDateFileTime)
-        assertThat(basicFileAttributes["lastModifiedTime"]).isEqualTo(testDateFileTime)
-        val lastAccessTime = basicFileAttributes["lastAccessTime"] as FileTime
-        assertThat(lastAccessTime).followedFlagRulesComparedTo(option, testDateFileTime)
     }
 
     @DisabledOnOs(OS.MAC, OS.LINUX)
@@ -844,6 +1015,52 @@ class AttributeCachingFileSystemTests {
         Files.createDirectory(it.getPath(directoryName))
         val cachingPath = it.getPath(directoryName, fileName)
         assertThat(Files.isHidden(cachingPath)).isEqualTo(expectedHidden)
+    }
+
+    @Test
+    fun `only commonly supported attribute views are transferred when copying across filesystems`() {
+        AttributeCachingFileSystem.wrapping(linuxJimfs()).use { linuxFilesystem ->
+
+            val tempPath = linuxFilesystem.getPath("toCopy.txt")
+            val linuxPath = linuxFilesystem.convertToCachingPath(tempPath) as AttributeCachingPath
+            Files.createFile(linuxPath)
+            val originalPermissions = setOf(PosixFilePermission.OWNER_WRITE, PosixFilePermission.OWNER_READ)
+            Files.setAttribute(linuxPath, "posix:permissions", originalPermissions)
+            Files.setAttribute(linuxPath, "lastModifiedTime", testDateFileTime)
+            assertThat(linuxPath).caches(BASIC, POSIX)
+
+            AttributeCachingFileSystem.wrapping(windowsJimfs()).use { windowsFilesystem ->
+
+                val tempFile = windowsFilesystem.rootDirectories.first().resolve("temp.txt")
+                val windowsPath = windowsFilesystem.convertToCachingPath(tempFile) as AttributeCachingPath
+                Files.copy(linuxPath, windowsPath, StandardCopyOption.COPY_ATTRIBUTES)
+                assertThat(windowsPath).onlyCaches(BASIC)
+                assertThat(windowsPath.getLastModifiedTime()).isEqualTo(testDateFileTime)
+            }
+        }
+    }
+
+    @Test
+    fun `only commonly supported attribute views are transferred when moving across filesystems`() {
+        AttributeCachingFileSystem.wrapping(linuxJimfs()).use { linuxFilesystem ->
+
+            val tempPath = linuxFilesystem.getPath("toMove.txt")
+            val linuxPath = linuxFilesystem.convertToCachingPath(tempPath) as AttributeCachingPath
+            Files.createFile(linuxPath)
+            val originalPermissions = setOf(PosixFilePermission.OWNER_WRITE, PosixFilePermission.OWNER_READ)
+            Files.setAttribute(linuxPath, "posix:permissions", originalPermissions)
+            Files.setAttribute(linuxPath, "lastModifiedTime", testDateFileTime)
+            assertThat(linuxPath).caches(BASIC, POSIX)
+
+            AttributeCachingFileSystem.wrapping(windowsJimfs()).use { windowsFileSystem ->
+
+                val tempFile = windowsFileSystem.rootDirectories.first().resolve("temp.txt")
+                val windowsPath = windowsFileSystem.convertToCachingPath(tempFile) as AttributeCachingPath
+                Files.move(linuxPath, windowsPath, StandardCopyOption.COPY_ATTRIBUTES)
+                assertThat(windowsPath).onlyCaches(BASIC)
+                assertThat(windowsPath.getLastModifiedTime()).isEqualTo(testDateFileTime)
+            }
+        }
     }
 
     companion object {
@@ -894,12 +1111,6 @@ class AttributeCachingFileSystemTests {
         )
 
         @JvmStatic
-        fun posixFileSystems(): Stream<Arguments> = Stream.of(
-            arguments(::linuxJimfs),
-            arguments(::osXJimfs),
-        )
-
-        @JvmStatic
         fun hiddenTestPathsWindows(): Stream<Arguments> = Stream.of(
             arguments("test1.txt", true),
             // blank filesystem name for a directory, directories can never be hidden
@@ -937,10 +1148,34 @@ class AttributeCachingFileSystemTests {
             arguments(StandardCopyOption.ATOMIC_MOVE, ::osXJimfs),
         )
 
+        fun linuxJimfs(): FileSystem = Jimfs.newFileSystem(
+            Configuration.unix()
+                .toBuilder()
+                .setAttributeViews("basic", "owner", "posix", "unix", "user")
+                .build(),
+        )
+
+        fun windowsJimfs(): FileSystem = Jimfs.newFileSystem(
+            Configuration.windows()
+                .toBuilder()
+                .setAttributeViews("basic", "owner", "dos", "acl", "user")
+                .build(),
+        )
+
         private fun ComparableSubject<FileTime>.followedFlagRulesComparedTo(
             options: CopyOption,
             expected: FileTime,
         ) = if (options == StandardCopyOption.COPY_ATTRIBUTES) isEqualTo(expected) else isNotEqualTo(expected)
+
+        private fun getOsString(fileSystem: FileSystem): String {
+            val supportedViews = fileSystem.supportedFileAttributeViews()
+            return when {
+                supportedViews.contains("dos") -> "windows"
+                supportedViews.contains("posix") -> "posix"
+                supportedViews.contains("acl") -> "windows"
+                else -> "none"
+            }
+        }
     }
 }
 
