@@ -242,6 +242,8 @@ internal class AttributeCachingPath(
     /**
      * Copies this [AttributeCachingPath]s values to the [target].
      *
+     * This function only copies attribute views supported by __both__ filesystems.
+     *
      * @param target The [AttributeCachingPath] to copy cached attributes to.
      * @param forceCopyAndInitTarget 'true' to indicate attributes should be copied from this
      * [AttributeCachingPath] regardless if they are `null` or not. Accessing a `null` attribute will force a lookup
