@@ -49,6 +49,7 @@ import java.util.stream.Stream
 import kotlin.concurrent.thread
 import kotlin.io.path.div
 import kotlin.io.path.exists
+import kotlin.io.path.getLastModifiedTime
 
 class AttributeCachingFileSystemTests {
 
@@ -1034,6 +1035,7 @@ class AttributeCachingFileSystemTests {
                 val windowsPath = windowsFilesystem.convertToCachingPath(tempFile) as AttributeCachingPath
                 Files.copy(linuxPath, windowsPath, StandardCopyOption.COPY_ATTRIBUTES)
                 assertThat(windowsPath).onlyCaches(BASIC)
+                assertThat(windowsPath.getLastModifiedTime()).isEqualTo(testDateFileTime)
             }
         }
     }
@@ -1056,6 +1058,7 @@ class AttributeCachingFileSystemTests {
                 val windowsPath = windowsFileSystem.convertToCachingPath(tempFile) as AttributeCachingPath
                 Files.move(linuxPath, windowsPath, StandardCopyOption.COPY_ATTRIBUTES)
                 assertThat(windowsPath).onlyCaches(BASIC)
+                assertThat(windowsPath.getLastModifiedTime()).isEqualTo(testDateFileTime)
             }
         }
     }
