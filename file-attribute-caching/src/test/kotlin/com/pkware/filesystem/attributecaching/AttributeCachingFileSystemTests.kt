@@ -1018,7 +1018,7 @@ class AttributeCachingFileSystemTests {
     }
 
     @Test
-    fun `only common attributes are transferred when copying across filesystems`() {
+    fun `only commonly supported attribute views are transferred when copying across filesystems`() {
         AttributeCachingFileSystem.wrapping(linuxJimfs()).use { linuxFilesystem ->
 
             val tempPath = linuxFilesystem.getPath("toCopy.txt")
@@ -1041,7 +1041,7 @@ class AttributeCachingFileSystemTests {
     }
 
     @Test
-    fun `only common attributes are transferred when moving across filesystems`() {
+    fun `only commonly supported attribute views are transferred when moving across filesystems`() {
         AttributeCachingFileSystem.wrapping(linuxJimfs()).use { linuxFilesystem ->
 
             val tempPath = linuxFilesystem.getPath("toMove.txt")
