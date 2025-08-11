@@ -196,13 +196,12 @@ class AttributeCachingFileSystemTests {
 
     @ParameterizedTest
     @MethodSource("allFileSystems")
-    fun `getName returns a cachingPath`(fileSystem: FileSystem) =
-        AttributeCachingFileSystem.wrapping(fileSystem).use {
-            val cachingPath = it.getPath("test.txt")
-            val closestToRootPathName = cachingPath.getName(0)
-            assertThat(cachingPath).isInstanceOf(AttributeCachingPath::class.java)
-            assertThat(closestToRootPathName).isInstanceOf(AttributeCachingPath::class.java)
-        }
+    fun `getName returns a cachingPath`(fileSystem: FileSystem) = AttributeCachingFileSystem.wrapping(fileSystem).use {
+        val cachingPath = it.getPath("test.txt")
+        val closestToRootPathName = cachingPath.getName(0)
+        assertThat(cachingPath).isInstanceOf(AttributeCachingPath::class.java)
+        assertThat(closestToRootPathName).isInstanceOf(AttributeCachingPath::class.java)
+    }
 
     @ParameterizedTest
     @MethodSource("allFileSystems")
@@ -794,9 +793,7 @@ class AttributeCachingFileSystemTests {
 
     @ParameterizedTest
     @MethodSource("allFileSystems")
-    fun `cached attributes do not get modified by concurrent operation`(
-        fileSystem: FileSystem,
-    ) {
+    fun `cached attributes do not get modified by concurrent operation`(fileSystem: FileSystem) {
         val tempDirPath = fileSystem.getPath("temp")
 
         AttributeCachingFileSystem.wrapping(fileSystem).use {
@@ -843,10 +840,7 @@ class AttributeCachingFileSystemTests {
 
     @ParameterizedTest
     @MethodSource("allFileSystemsWithCopyOption")
-    fun `copy file from source to target`(
-        option: CopyOption,
-        fileSystem: () -> FileSystem,
-    ) {
+    fun `copy file from source to target`(option: CopyOption, fileSystem: () -> FileSystem) {
         val testFileSystem = fileSystem()
         AttributeCachingFileSystem.wrapping(testFileSystem).use {
             // get filesystem attribute caching path
@@ -916,10 +910,7 @@ class AttributeCachingFileSystemTests {
 
     @ParameterizedTest
     @MethodSource("allFileSystemsWithMoveOption")
-    fun `move file from source to target`(
-        option: CopyOption,
-        fileSystem: () -> FileSystem,
-    ) {
+    fun `move file from source to target`(option: CopyOption, fileSystem: () -> FileSystem) {
         val testFileSystem = fileSystem()
         AttributeCachingFileSystem.wrapping(testFileSystem).use {
             // get filesystem attribute caching path
@@ -1006,16 +997,13 @@ class AttributeCachingFileSystemTests {
     @DisabledOnOs(OS.WINDOWS)
     @ParameterizedTest
     @MethodSource("hiddenTestPathsPosix")
-    fun `file isHidden on unix and macOS`(
-        fileName: String,
-        expectedHidden: Boolean,
-        fileSystem: () -> FileSystem,
-    ) = AttributeCachingFileSystem.wrapping(fileSystem()).use {
-        val directoryName = "temp"
-        Files.createDirectory(it.getPath(directoryName))
-        val cachingPath = it.getPath(directoryName, fileName)
-        assertThat(Files.isHidden(cachingPath)).isEqualTo(expectedHidden)
-    }
+    fun `file isHidden on unix and macOS`(fileName: String, expectedHidden: Boolean, fileSystem: () -> FileSystem) =
+        AttributeCachingFileSystem.wrapping(fileSystem()).use {
+            val directoryName = "temp"
+            Files.createDirectory(it.getPath(directoryName))
+            val cachingPath = it.getPath(directoryName, fileName)
+            assertThat(Files.isHidden(cachingPath)).isEqualTo(expectedHidden)
+        }
 
     @Test
     fun `only commonly supported attribute views are transferred when copying across filesystems`() {
@@ -1162,10 +1150,8 @@ class AttributeCachingFileSystemTests {
                 .build(),
         )
 
-        private fun ComparableSubject<FileTime>.followedFlagRulesComparedTo(
-            options: CopyOption,
-            expected: FileTime,
-        ) = if (options == StandardCopyOption.COPY_ATTRIBUTES) isEqualTo(expected) else isNotEqualTo(expected)
+        private fun ComparableSubject<FileTime>.followedFlagRulesComparedTo(options: CopyOption, expected: FileTime) =
+            if (options == StandardCopyOption.COPY_ATTRIBUTES) isEqualTo(expected) else isNotEqualTo(expected)
 
         private fun getOsString(fileSystem: FileSystem): String {
             val supportedViews = fileSystem.supportedFileAttributeViews()

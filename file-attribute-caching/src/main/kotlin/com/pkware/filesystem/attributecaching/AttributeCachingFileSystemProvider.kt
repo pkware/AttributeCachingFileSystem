@@ -292,18 +292,15 @@ internal class AttributeCachingFileSystemProvider : FileSystemProvider() {
      * given [type] are not supported.
      */
     @Throws(IOException::class, UnsupportedOperationException::class)
-    override fun <A : BasicFileAttributes?> readAttributes(
-        path: Path,
-        type: Class<A>,
-        vararg options: LinkOption,
-    ): A = if (path is AttributeCachingPath) {
-        val attributes = path.getAllAttributesMatchingClass(type) ?: throw UnsupportedOperationException(
-            "Could not read attributes of type $type from the path $path and its delegate filesystem.",
-        )
-        attributes
-    } else {
-        path.fileSystem.provider().readAttributes(path, type, *options)
-    }
+    override fun <A : BasicFileAttributes?> readAttributes(path: Path, type: Class<A>, vararg options: LinkOption): A =
+        if (path is AttributeCachingPath) {
+            val attributes = path.getAllAttributesMatchingClass(type) ?: throw UnsupportedOperationException(
+                "Could not read attributes of type $type from the path $path and its delegate filesystem.",
+            )
+            attributes
+        } else {
+            path.fileSystem.provider().readAttributes(path, type, *options)
+        }
 
     /**
      * Read filesystem [attributes] from the incoming [path]. If the returned attributes are `null` we then attempt to get
@@ -324,18 +321,15 @@ internal class AttributeCachingFileSystemProvider : FileSystemProvider() {
      * [FileSystemProvider].
      */
     @Throws(IOException::class, UnsupportedOperationException::class, IllegalArgumentException::class)
-    override fun readAttributes(
-        path: Path,
-        attributes: String,
-        vararg options: LinkOption,
-    ): MutableMap<String, Any> = if (path is AttributeCachingPath) {
-        val attributesMap = path.getAllAttributesMatchingNames(attributes) ?: throw IllegalArgumentException(
-            "Could not read attributes $attributes of the path $path from the delegate filesystem.",
-        )
-        attributesMap
-    } else {
-        path.fileSystem.provider().readAttributes(path, attributes, *options)
-    }
+    override fun readAttributes(path: Path, attributes: String, vararg options: LinkOption): MutableMap<String, Any> =
+        if (path is AttributeCachingPath) {
+            val attributesMap = path.getAllAttributesMatchingNames(attributes) ?: throw IllegalArgumentException(
+                "Could not read attributes $attributes of the path $path from the delegate filesystem.",
+            )
+            attributesMap
+        } else {
+            path.fileSystem.provider().readAttributes(path, attributes, *options)
+        }
 
     /**
      * Set a single attribute or attribute class (ie: "dos:*","basic:*","posix:permissions", etc.) for the given [path]

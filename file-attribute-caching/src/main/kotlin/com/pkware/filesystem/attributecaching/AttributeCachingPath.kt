@@ -46,10 +46,8 @@ public const val CACHE_KEY_ACL: String = "acl:*"
  * @param fileSystem the [FileSystem] associated with this [AttributeCachingPath] instance.
  * @param delegate the [Path] to forward calls to if needed.
  */
-internal class AttributeCachingPath(
-    private val fileSystem: FileSystem,
-    internal val delegate: Path,
-) : ForwardingPath(delegate) {
+internal class AttributeCachingPath(private val fileSystem: FileSystem, internal val delegate: Path) :
+    ForwardingPath(delegate) {
 
     private val delegateSupportedFileAttributeViews = delegate.fileSystem.supportedFileAttributeViews()
 

@@ -56,11 +56,8 @@ public abstract class ForwardingFileSystemProvider(private val delegate: FileSys
         delegate.delete(path)
     }
 
-    override fun <A : BasicFileAttributes?> readAttributes(
-        path: Path,
-        type: Class<A>,
-        vararg options: LinkOption,
-    ): A = delegate.readAttributes(path, type, *options)
+    override fun <A : BasicFileAttributes?> readAttributes(path: Path, type: Class<A>, vararg options: LinkOption): A =
+        delegate.readAttributes(path, type, *options)
 
     override fun readAttributes(path: Path, attributes: String, vararg options: LinkOption): MutableMap<String, Any> =
         delegate.readAttributes(path, attributes, *options)
