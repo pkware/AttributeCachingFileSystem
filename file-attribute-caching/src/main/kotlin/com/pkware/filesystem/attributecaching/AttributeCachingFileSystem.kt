@@ -19,10 +19,8 @@ import java.util.UUID
  * @param delegate The [FileSystem] to wrap and forward calls to.
  * @param provider The [FileSystemProvider] associated with this [FileSystem].
  */
-public class AttributeCachingFileSystem(
-    delegate: FileSystem,
-    private val provider: FileSystemProvider,
-) : ForwardingFileSystem(delegate) {
+public class AttributeCachingFileSystem(delegate: FileSystem, private val provider: FileSystemProvider) :
+    ForwardingFileSystem(delegate) {
 
     override fun provider(): FileSystemProvider = provider
 
@@ -61,9 +59,7 @@ public class AttributeCachingFileSystem(
          * @throws IOException If an IO error occurs.
          */
         @Throws(FileAlreadyExistsException::class, ProviderNotFoundException::class, IOException::class)
-        public fun wrapping(
-            fileSystem: FileSystem,
-        ): AttributeCachingFileSystem = FileSystems.newFileSystem(
+        public fun wrapping(fileSystem: FileSystem): AttributeCachingFileSystem = FileSystems.newFileSystem(
             // Need to ensure a unique fileSystem name everytime this is called, hence UUID.randomUUID()
             URI.create("cache:///${UUID.randomUUID()}"),
             mapOf(Pair("filesystem", fileSystem)),
