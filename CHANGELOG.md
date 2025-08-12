@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+## [1.0.4]
+- Gradle, Kotlin, and other dependency versions updated.
+
 ## [1.0.3]
 - Make the AttributeCachingPath on demand and remove all init logic.
 - Add individual public properties to check if a given attribute has been cached.
@@ -22,6 +25,7 @@ Fixed issues with AttributeCachingPath not being used to wrap parent, root, and 
 Initial work for the file attribute caching filesystem using cached attribute fields that do not expire.
 
 [Unreleased]: https://github.com/pkware/attributeCachingFileSystem/tree/main
+[1.0.4]: https://github.com/pkware/attributeCachingFileSystem/tree/1.0.4
 [1.0.3]: https://github.com/pkware/attributeCachingFileSystem/tree/1.0.3
 [1.0.2]: https://github.com/pkware/attributeCachingFileSystem/tree/1.0.2
 [1.0.1]: https://github.com/pkware/attributeCachingFileSystem/tree/1.0.1
