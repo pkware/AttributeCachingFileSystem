@@ -1,13 +1,15 @@
 name: Publish to Maven Central
 
 on:
-  push:
+  pull_request:
+    types: [closed]
     branches:
       - main
 
+
 jobs:
   publish:
-    if: contains(github.ref, 'release')
+    if: github.event.pull_request.merged == true && contains(github.event.pull_request.head.ref, 'release')
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -29,7 +31,7 @@ jobs:
           ORG_GRADLE_PROJECT_SIGNING_PASSWORD: ${{ secrets.SIGNING_PASSWORD }}
 
       - name: Notify Central Publisher Portal
-        if: contains(github.ref, 'SNAPSHOT') == false
+        if: contains(github.event.pull_request.head.ref, 'SNAPSHOT') == false
         run: |
           token=$(echo -n "${{ secrets.NEXUS_USERNAME }}:${{ secrets.NEXUS_PASSWORD }}" | base64)
           curl -X POST \
