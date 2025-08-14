@@ -1,0 +1,38 @@
+name: Publish to Maven Central
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  publish:
+    if: contains(github.ref, 'release')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          java-version: 11
+          distribution: 'temurin'
+
+      - name: Publish to Maven Central
+        run: ./gradlew publish
+        env:
+          ORG_GRADLE_PROJECT_NEXUS_USERNAME: ${{ secrets.NEXUS_USERNAME }}
+          ORG_GRADLE_PROJECT_NEXUS_PASSWORD: ${{ secrets.NEXUS_PASSWORD }}
+          ORG_GRADLE_PROJECT_SIGNING_KEY_ID: ${{ secrets.SIGNING_KEY_ID }}
+          ORG_GRADLE_PROJECT_SIGNING_KEY: ${{ secrets.SIGNING_KEY }}
+          ORG_GRADLE_PROJECT_SIGNING_PASSWORD: ${{ secrets.SIGNING_PASSWORD }}
+
+      - name: Notify Central Publisher Portal
+        if: !contains(github.ref, 'SNAPSHOT')
+        run: |
+          token=$(echo -n "${{ secrets.NEXUS_USERNAME }}:${{ secrets.NEXUS_PASSWORD }}" | base64)
+          curl -X POST \
+            -H "Authorization: Bearer $token" \
+            -F "publishing_type=automatic" \
+            https://central.sonatype.com/manual/upload/defaultRepository/com.pkware.filesystem

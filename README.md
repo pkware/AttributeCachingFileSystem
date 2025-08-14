@@ -64,23 +64,23 @@ val cachingPath = cachingFilesystem.convertToCachingPath(path)
 ```
 
 ## Releasing:
+Both a normal or snapshot release can be made. In order to have the publish pipeline run, the release must be made from
+a `release/*` branch. For a snapshot release, the release must be made fron a `release/*-SNAPSHOT` branch.
+
 1. Make and checkout a release branch on github.
-2. Change the version in gradle.properties to a non-SNAPSHOT version.
-3. Update the CHANGELOG.md for the impending release.
+2. Change the version in gradle.properties to a non-SNAPSHOT version if needed.
+3. Update the CHANGELOG.md for the impending release for non-SNAPSHOT versions.
 4. Run `git commit -am "Release X.Y.Z."` (where X.Y.Z is the new version) in the terminal or
    command line.
 5. Make a PR with your changes.
 6. Merge the release PR after approval, tag the commit on the main branch with
    `git tag -a X.Y.Z -m "X.Y.Z"`(X.Y.Z is the new version).
 7. Run `git push --tags`.
-8. Run `./gradlew publish` in the terminal or command line.
-9. Visit [Sonatype Nexus] and promote the artifact.
-10. Update `gradle.properties` to the next SNAPSHOT version.
-11. Run `git commit -am "Prepare next development version."`
-12. Make a PR with your changes.
-13. Merge the next version PR after approval.
-
-If step 8 or 9 fails, drop the Sonatype repo, fix the problem, commit, and start again at step 8.
+8. Verify [Sonatype] has the artifact published
+8. Update `gradle.properties` to the next SNAPSHOT version.
+9. Run `git commit -am "Prepare next development version."`
+10. Make a PR with your changes.
+11. Merge the next version PR after approval.
 
 [Procmon]: https://learn.microsoft.com/en-us/sysinternals/downloads/procmon
-[Sonatype Nexus]: https://oss.sonatype.org/
+[Sonatype]: https://central.sonatype.com/
