@@ -1,15 +1,12 @@
 name: Publish to Maven Central
 
 on:
-  pull_request:
-    types: [closed]
+  push:
     branches:
       - main
 
-
 jobs:
   publish:
-    if: github.event.pull_request.merged == true && contains(github.event.pull_request.head.ref, 'release')
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -30,11 +27,21 @@ jobs:
           ORG_GRADLE_PROJECT_SIGNING_KEY: ${{ secrets.SIGNING_KEY }}
           ORG_GRADLE_PROJECT_SIGNING_PASSWORD: ${{ secrets.SIGNING_PASSWORD }}
 
+      - name: Check version
+        id: version
+        run: |
+          version=$(grep "attributeCachingFilesystemVersion" gradle.properties | cut -d'=' -f2 | tr -d ' ')
+          if [[ "$version" != *"SNAPSHOT"* ]]; then
+            echo "is_release=true" >> $GITHUB_OUTPUT
+          else
+            echo "is_release=false" >> $GITHUB_OUTPUT
+          fi
+
       - name: Notify Central Publisher Portal
-        if: contains(github.event.pull_request.head.ref, 'SNAPSHOT') == false
+        if: steps.version.outputs.is_release == 'true'
         run: |
           token=$(echo -n "${{ secrets.NEXUS_USERNAME }}:${{ secrets.NEXUS_PASSWORD }}" | base64)
           curl -X POST \
             -H "Authorization: Bearer $token" \
             -F "publishing_type=automatic" \
-            https://central.sonatype.com/manual/upload/defaultRepository/com.pkware.filesystem
+            https://ossrh-staging-api.central.sonatype.com/manual/upload/defaultRepository/com.pkware.filesystem
