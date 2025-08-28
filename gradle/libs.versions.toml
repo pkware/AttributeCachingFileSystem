@@ -1,7 +1,7 @@
 [versions]
 detektVersion = "1.23.1"
 junitVersion = "5.10.3"
-ktlintVersion = "13.0.0"
+ktlintVersion = "13.1.0"
 log4jVersion = "2.25.1"
 
 [libraries]
