@@ -36,7 +36,7 @@ subprojects {
     }
 
     dependencies {
-        detektPlugins(project.dependencies.create("com.pkware.detekt:import-extension:1.1.0"))
+        detektPlugins(project.dependencies.create("com.pkware.detekt:import-extension:1.2.0"))
     }
 
     tasks.withType<Test> { useJUnitPlatform() }
