@@ -5,7 +5,7 @@ ktlintVersion = "14.2.0"
 log4jVersion = "2.25.4"
 
 [libraries]
-commons-io = "commons-io:commons-io:2.21.0"
+commons-io = "commons-io:commons-io:2.22.0"
 auto-service-annotations = "com.google.auto.service:auto-service-annotations:1.1.1"
 auto-service-ksp = "dev.zacsweers.autoservice:auto-service-ksp:1.2.0"
 junit-jupiter-engine = { module = "org.junit.jupiter:junit-jupiter-engine", version.ref = "junitVersion" }
