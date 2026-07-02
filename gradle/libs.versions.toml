@@ -2,7 +2,7 @@
 detektVersion = "1.23.1"
 junitVersion = "5.10.3"
 ktlintVersion = "14.2.0"
-log4jVersion = "2.26.0"
+log4jVersion = "2.26.1"
 
 [libraries]
 commons-io = "commons-io:commons-io:2.22.0"
