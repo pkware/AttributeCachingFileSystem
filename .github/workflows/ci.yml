@@ -20,7 +20,7 @@ jobs:
     - name: Set up JDK
       uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6
       with:
-        java-version: 11
+        java-version: 11.0.32+101
         distribution: 'temurin'
 
     - uses: burrunan/gradle-cache-action@404534c34a2faa40430357a3183522a845b04f3b # v3.0
